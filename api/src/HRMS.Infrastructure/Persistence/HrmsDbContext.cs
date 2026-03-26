@@ -16,6 +16,7 @@ public class HrmsDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Gui
     public DbSet<Department> Departments => Set<Department>();
     public DbSet<Employee> Employees => Set<Employee>();
     public DbSet<AttendanceRecord> AttendanceRecords => Set<AttendanceRecord>();
+    public DbSet<AttendanceSettings> AttendanceSettings => Set<AttendanceSettings>();
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<SalaryStructure> SalaryStructures => Set<SalaryStructure>();
     public DbSet<PayrollRecord> PayrollRecords => Set<PayrollRecord>();
@@ -62,10 +63,23 @@ public class HrmsDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Gui
             entity.HasIndex(x => new { x.EmployeeId, x.WorkDate }).IsUnique();
             entity.Property(x => x.WorkedHours).HasPrecision(8, 2);
             entity.Property(x => x.Notes).HasMaxLength(400);
+            entity.Property(x => x.CheckInPhotoUrl).HasMaxLength(512);
+            entity.Property(x => x.CheckOutPhotoUrl).HasMaxLength(512);
+            entity.Property(x => x.CheckInLatitude).HasPrecision(9, 6);
+            entity.Property(x => x.CheckInLongitude).HasPrecision(9, 6);
+            entity.Property(x => x.CheckOutLatitude).HasPrecision(9, 6);
+            entity.Property(x => x.CheckOutLongitude).HasPrecision(9, 6);
+            entity.Property(x => x.CheckInLocationLabel).HasMaxLength(200);
+            entity.Property(x => x.CheckOutLocationLabel).HasMaxLength(200);
             entity.HasOne(x => x.Employee)
                 .WithMany(x => x.AttendanceRecords)
                 .HasForeignKey(x => x.EmployeeId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<AttendanceSettings>(entity =>
+        {
+            entity.ToTable("AttendanceSettings");
         });
 
         builder.Entity<LeaveRequest>(entity =>

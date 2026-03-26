@@ -25,6 +25,8 @@ public record LeaveListFilter(
 
 public record PayrollListFilter(
     Guid? EmployeeId = null,
+    Guid? DepartmentId = null,
     int? Year = null,
+    int? Month = null,
     int PageNumber = 1,
     int PageSize = 10);

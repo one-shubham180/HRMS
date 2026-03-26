@@ -13,10 +13,16 @@ public class LocalFileStorageService : IFileStorageService
     }
 
     public async Task<string> SaveEmployeeProfileImageAsync(Stream stream, string fileName, string? contentType, CancellationToken cancellationToken = default)
+        => await SaveFileAsync(stream, fileName, "profiles", cancellationToken);
+
+    public async Task<string> SaveAttendanceProofImageAsync(Stream stream, string fileName, string? contentType, CancellationToken cancellationToken = default)
+        => await SaveFileAsync(stream, fileName, "attendance", cancellationToken);
+
+    private async Task<string> SaveFileAsync(Stream stream, string fileName, string folderName, CancellationToken cancellationToken)
     {
         var extension = Path.GetExtension(fileName);
         var safeExtension = string.IsNullOrWhiteSpace(extension) ? ".png" : extension;
-        var uploadsFolder = Path.Combine(_environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot"), "uploads", "profiles");
+        var uploadsFolder = Path.Combine(_environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot"), "uploads", folderName);
         Directory.CreateDirectory(uploadsFolder);
 
         var generatedFileName = $"{Guid.NewGuid():N}{safeExtension}";
@@ -26,6 +32,6 @@ public class LocalFileStorageService : IFileStorageService
         await using var fileStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write);
         await stream.CopyToAsync(fileStream, cancellationToken);
 
-        return $"/uploads/profiles/{generatedFileName}";
+        return $"/uploads/{folderName}/{generatedFileName}";
     }
 }

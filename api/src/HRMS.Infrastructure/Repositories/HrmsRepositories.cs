@@ -80,6 +80,26 @@ public class EmployeeRepository : IEmployeeRepository
         };
     }
 
+    public async Task<IReadOnlyCollection<Employee>> GetActiveForPayrollAsync(Guid? departmentId, CancellationToken cancellationToken)
+    {
+        var query = _context.Employees
+            .AsNoTracking()
+            .Include(x => x.Department)
+            .Include(x => x.SalaryStructure)
+            .Where(x => x.IsActive)
+            .AsQueryable();
+
+        if (departmentId.HasValue)
+        {
+            query = query.Where(x => x.DepartmentId == departmentId.Value);
+        }
+
+        return await query
+            .OrderBy(x => x.FirstName)
+            .ThenBy(x => x.LastName)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<bool> ExistsByEmployeeCodeAsync(string employeeCode, CancellationToken cancellationToken) =>
         _context.Employees.AnyAsync(x => x.EmployeeCode == employeeCode.Trim(), cancellationToken);
 
@@ -139,7 +159,10 @@ public class AttendanceRepository : IAttendanceRepository
 
     public async Task<PagedResult<AttendanceRecord>> GetPagedAsync(AttendanceLogFilter filter, CancellationToken cancellationToken)
     {
-        var query = _context.AttendanceRecords.AsNoTracking().AsQueryable();
+        var query = _context.AttendanceRecords
+            .AsNoTracking()
+            .Include(x => x.Employee)
+            .AsQueryable();
 
         if (filter.EmployeeId.HasValue)
         {
@@ -280,6 +303,24 @@ public class LeaveRequestRepository : ILeaveRequestRepository
     public void Update(LeaveRequest leaveRequest) => _context.LeaveRequests.Update(leaveRequest);
 }
 
+public class AttendanceSettingsRepository : IAttendanceSettingsRepository
+{
+    private readonly HrmsDbContext _context;
+
+    public AttendanceSettingsRepository(HrmsDbContext context)
+    {
+        _context = context;
+    }
+
+    public Task<AttendanceSettings?> GetCurrentAsync(CancellationToken cancellationToken) =>
+        _context.Set<AttendanceSettings>().FirstOrDefaultAsync(cancellationToken);
+
+    public Task AddAsync(AttendanceSettings settings, CancellationToken cancellationToken) =>
+        _context.Set<AttendanceSettings>().AddAsync(settings, cancellationToken).AsTask();
+
+    public void Update(AttendanceSettings settings) => _context.Set<AttendanceSettings>().Update(settings);
+}
+
 public class SalaryStructureRepository : ISalaryStructureRepository
 {
     private readonly HrmsDbContext _context;
@@ -329,9 +370,19 @@ public class PayrollRepository : IPayrollRepository
             query = query.Where(x => x.EmployeeId == filter.EmployeeId.Value);
         }
 
+        if (filter.DepartmentId.HasValue)
+        {
+            query = query.Where(x => x.Employee != null && x.Employee.DepartmentId == filter.DepartmentId.Value);
+        }
+
         if (filter.Year.HasValue)
         {
             query = query.Where(x => x.Year == filter.Year.Value);
+        }
+
+        if (filter.Month.HasValue)
+        {
+            query = query.Where(x => x.Month == filter.Month.Value);
         }
 
         query = query.OrderByDescending(x => x.Year).ThenByDescending(x => x.Month);
@@ -349,6 +400,41 @@ public class PayrollRepository : IPayrollRepository
             PageSize = filter.PageSize,
             TotalCount = totalCount
         };
+    }
+
+    public async Task<IReadOnlyCollection<PayrollRecord>> GetFilteredAsync(PayrollListFilter filter, CancellationToken cancellationToken)
+    {
+        var query = _context.PayrollRecords
+            .AsNoTracking()
+            .Include(x => x.Employee)
+            .AsQueryable();
+
+        if (filter.EmployeeId.HasValue)
+        {
+            query = query.Where(x => x.EmployeeId == filter.EmployeeId.Value);
+        }
+
+        if (filter.DepartmentId.HasValue)
+        {
+            query = query.Where(x => x.Employee != null && x.Employee.DepartmentId == filter.DepartmentId.Value);
+        }
+
+        if (filter.Year.HasValue)
+        {
+            query = query.Where(x => x.Year == filter.Year.Value);
+        }
+
+        if (filter.Month.HasValue)
+        {
+            query = query.Where(x => x.Month == filter.Month.Value);
+        }
+
+        return await query
+            .OrderBy(x => x.Employee!.FirstName)
+            .ThenBy(x => x.Employee!.LastName)
+            .ThenBy(x => x.Year)
+            .ThenBy(x => x.Month)
+            .ToListAsync(cancellationToken);
     }
 
     public void Update(PayrollRecord payrollRecord) => _context.PayrollRecords.Update(payrollRecord);
@@ -396,7 +482,5 @@ public class DashboardRepository : IDashboardRepository
     public async Task<decimal> GetMonthlyPayrollTotalAsync(int year, int month, CancellationToken cancellationToken) =>
         await _context.PayrollRecords
             .Where(x => x.Year == year && x.Month == month)
-            .Select(x => x.NetSalary)
-            .DefaultIfEmpty(0)
-            .SumAsync(cancellationToken);
+            .SumAsync(x => (decimal?)x.NetSalary, cancellationToken) ?? 0m;
 }

@@ -14,6 +14,7 @@ public record GetAttendanceLogsQuery(
     DateOnly? EndDate = null,
     int PageNumber = 1,
     int PageSize = 10) : IRequest<PagedResult<AttendanceRecordDto>>;
+public record GetAttendanceSettingsQuery() : IRequest<AttendanceSettingsDto>;
 
 public class GetAttendanceLogsQueryHandler : IRequestHandler<GetAttendanceLogsQuery, PagedResult<AttendanceRecordDto>>
 {
@@ -62,5 +63,21 @@ public class GetAttendanceLogsQueryHandler : IRequestHandler<GetAttendanceLogsQu
             PageSize = result.PageSize,
             TotalCount = result.TotalCount
         };
+    }
+}
+
+public class GetAttendanceSettingsQueryHandler : IRequestHandler<GetAttendanceSettingsQuery, AttendanceSettingsDto>
+{
+    private readonly IAttendanceSettingsRepository _attendanceSettingsRepository;
+
+    public GetAttendanceSettingsQueryHandler(IAttendanceSettingsRepository attendanceSettingsRepository)
+    {
+        _attendanceSettingsRepository = attendanceSettingsRepository;
+    }
+
+    public async Task<AttendanceSettingsDto> Handle(GetAttendanceSettingsQuery request, CancellationToken cancellationToken)
+    {
+        var settings = await _attendanceSettingsRepository.GetCurrentAsync(cancellationToken);
+        return new AttendanceSettingsDto(settings?.RequireGeoTaggedPhotoForAttendance ?? false);
     }
 }

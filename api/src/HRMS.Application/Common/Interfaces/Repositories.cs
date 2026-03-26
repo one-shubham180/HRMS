@@ -9,6 +9,7 @@ public interface IEmployeeRepository
     Task<Employee?> GetByIdAsync(Guid employeeId, CancellationToken cancellationToken);
     Task<Employee?> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken);
     Task<PagedResult<Employee>> GetPagedAsync(EmployeeListFilter filter, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<Employee>> GetActiveForPayrollAsync(Guid? departmentId, CancellationToken cancellationToken);
     Task<bool> ExistsByEmployeeCodeAsync(string employeeCode, CancellationToken cancellationToken);
     Task<bool> ExistsByWorkEmailAsync(string workEmail, CancellationToken cancellationToken);
     void Update(Employee employee);
@@ -35,6 +36,13 @@ public interface IAttendanceRepository
     Task<decimal> GetLossOfPayDaysAsync(Guid employeeId, int year, int month, CancellationToken cancellationToken);
 }
 
+public interface IAttendanceSettingsRepository
+{
+    Task<AttendanceSettings?> GetCurrentAsync(CancellationToken cancellationToken);
+    Task AddAsync(AttendanceSettings settings, CancellationToken cancellationToken);
+    void Update(AttendanceSettings settings);
+}
+
 public interface ILeaveRequestRepository
 {
     Task AddAsync(LeaveRequest leaveRequest, CancellationToken cancellationToken);
@@ -57,6 +65,7 @@ public interface IPayrollRepository
     Task AddAsync(PayrollRecord payrollRecord, CancellationToken cancellationToken);
     Task<PayrollRecord?> GetByEmployeeAndPeriodAsync(Guid employeeId, int year, int month, CancellationToken cancellationToken);
     Task<PagedResult<PayrollRecord>> GetPagedAsync(PayrollListFilter filter, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<PayrollRecord>> GetFilteredAsync(PayrollListFilter filter, CancellationToken cancellationToken);
     void Update(PayrollRecord payrollRecord);
 }
 

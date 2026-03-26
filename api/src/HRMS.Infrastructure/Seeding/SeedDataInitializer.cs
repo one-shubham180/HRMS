@@ -27,6 +27,7 @@ public class SeedDataInitializer
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         await _context.Database.EnsureCreatedAsync(cancellationToken);
+        await EnsureSchemaUpgradesAsync(cancellationToken);
 
         foreach (var role in ApplicationRoles.All)
         {
@@ -149,6 +150,49 @@ public class SeedDataInitializer
 
             await _context.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private async Task EnsureSchemaUpgradesAsync(CancellationToken cancellationToken)
+    {
+        await _context.Database.ExecuteSqlRawAsync("""
+IF OBJECT_ID(N'[dbo].[AttendanceSettings]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[AttendanceSettings] (
+        [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+        [CreatedUtc] datetime2 NOT NULL,
+        [ModifiedUtc] datetime2 NULL,
+        [RequireGeoTaggedPhotoForAttendance] bit NOT NULL CONSTRAINT [DF_AttendanceSettings_RequireGeoTaggedPhotoForAttendance] DEFAULT(0)
+    );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[AttendanceSettings])
+BEGIN
+    INSERT INTO [dbo].[AttendanceSettings] ([Id], [CreatedUtc], [ModifiedUtc], [RequireGeoTaggedPhotoForAttendance])
+    VALUES (NEWID(), SYSUTCDATETIME(), NULL, 0);
+END;
+
+IF COL_LENGTH('dbo.Attendance', 'CheckInCapturedPhotoUtc') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [CheckInCapturedPhotoUtc] datetime2 NULL;
+IF COL_LENGTH('dbo.Attendance', 'CheckInPhotoUrl') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [CheckInPhotoUrl] nvarchar(512) NULL;
+IF COL_LENGTH('dbo.Attendance', 'CheckInLatitude') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [CheckInLatitude] decimal(9,6) NULL;
+IF COL_LENGTH('dbo.Attendance', 'CheckInLongitude') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [CheckInLongitude] decimal(9,6) NULL;
+IF COL_LENGTH('dbo.Attendance', 'CheckInLocationLabel') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [CheckInLocationLabel] nvarchar(200) NULL;
+
+IF COL_LENGTH('dbo.Attendance', 'CheckOutCapturedPhotoUtc') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [CheckOutCapturedPhotoUtc] datetime2 NULL;
+IF COL_LENGTH('dbo.Attendance', 'CheckOutPhotoUrl') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [CheckOutPhotoUrl] nvarchar(512) NULL;
+IF COL_LENGTH('dbo.Attendance', 'CheckOutLatitude') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [CheckOutLatitude] decimal(9,6) NULL;
+IF COL_LENGTH('dbo.Attendance', 'CheckOutLongitude') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [CheckOutLongitude] decimal(9,6) NULL;
+IF COL_LENGTH('dbo.Attendance', 'CheckOutLocationLabel') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [CheckOutLocationLabel] nvarchar(200) NULL;
+""", cancellationToken);
     }
 
     private async Task EnsureSeedUserAsync(

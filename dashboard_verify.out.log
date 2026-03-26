@@ -1,0 +1,4 @@
+[14:46:51 WRN] The WebRootPath was not found: D:\HRMS\api\src\HRMS.Api\bin\Debug\net8.0\wwwroot. Static files may be unavailable.
+[14:46:58 WRN] Failed to determine the https port for redirect.
+[14:46:58 INF] HTTP POST /api/auth/login responded 200 in 665.9212 ms
+[14:46:59 INF] HTTP GET /api/dashboard/admin responded 200 in 595.2590 ms

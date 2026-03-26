@@ -5,7 +5,10 @@ public record AdminDashboardDto(
     int TotalDepartments,
     int PendingLeaves,
     int PresentToday,
-    decimal MonthlyPayroll);
+    decimal MonthlyPayroll,
+    IReadOnlyCollection<EmployeeDto> RecentEmployees,
+    IReadOnlyCollection<LeaveRequestDto> PendingLeaveRequests,
+    IReadOnlyCollection<PayrollRecordDto> RecentPayrolls);
 
 public record EmployeeDashboardDto(
     EmployeeDto Profile,

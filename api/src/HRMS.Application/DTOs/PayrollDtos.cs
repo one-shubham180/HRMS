@@ -26,3 +26,12 @@ public record PayrollRecordDto(
     decimal NetSalary,
     string PayslipNumber,
     DateTime GeneratedUtc);
+
+public record PayrollBatchResultDto(
+    int Year,
+    int Month,
+    string Scope,
+    int TotalEmployees,
+    int GeneratedCount,
+    int SkippedCount,
+    IReadOnlyCollection<string> SkippedEmployees);

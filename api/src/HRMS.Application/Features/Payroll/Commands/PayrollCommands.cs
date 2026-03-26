@@ -20,6 +20,7 @@ public record UpsertSalaryStructureCommand(
     decimal TaxDeduction) : IRequest<SalaryStructureDto>;
 
 public record GenerateMonthlyPayrollCommand(Guid EmployeeId, int Year, int Month) : IRequest<PayrollRecordDto>;
+public record GeneratePayrollBatchCommand(Guid? DepartmentId, int Year, int Month) : IRequest<PayrollBatchResultDto>;
 
 public class UpsertSalaryStructureCommandValidator : AbstractValidator<UpsertSalaryStructureCommand>
 {
@@ -41,6 +42,15 @@ public class GenerateMonthlyPayrollCommandValidator : AbstractValidator<Generate
     public GenerateMonthlyPayrollCommandValidator()
     {
         RuleFor(x => x.EmployeeId).NotEmpty();
+        RuleFor(x => x.Year).InclusiveBetween(2020, 2100);
+        RuleFor(x => x.Month).InclusiveBetween(1, 12);
+    }
+}
+
+public class GeneratePayrollBatchCommandValidator : AbstractValidator<GeneratePayrollBatchCommand>
+{
+    public GeneratePayrollBatchCommandValidator()
+    {
         RuleFor(x => x.Year).InclusiveBetween(2020, 2100);
         RuleFor(x => x.Month).InclusiveBetween(1, 12);
     }
@@ -71,15 +81,12 @@ public class UpsertSalaryStructureCommandHandler : IRequestHandler<UpsertSalaryS
             ?? throw new AppException("Employee not found.", 404);
 
         var salaryStructure = await _salaryStructureRepository.GetByEmployeeIdAsync(request.EmployeeId, cancellationToken);
-        if (salaryStructure is null)
-        {
-            salaryStructure = new SalaryStructure
-            {
-                EmployeeId = employee.Id
-            };
+        var isNewSalaryStructure = salaryStructure is null;
 
-            await _salaryStructureRepository.AddAsync(salaryStructure, cancellationToken);
-        }
+        salaryStructure ??= new SalaryStructure
+        {
+            EmployeeId = employee.Id
+        };
 
         salaryStructure.BasicSalary = request.BasicSalary;
         salaryStructure.HouseRentAllowance = request.HouseRentAllowance;
@@ -91,7 +98,15 @@ public class UpsertSalaryStructureCommandHandler : IRequestHandler<UpsertSalaryS
         salaryStructure.ModifiedUtc = DateTime.UtcNow;
         salaryStructure.Employee = employee;
 
-        _salaryStructureRepository.Update(salaryStructure);
+        if (isNewSalaryStructure)
+        {
+            await _salaryStructureRepository.AddAsync(salaryStructure, cancellationToken);
+        }
+        else
+        {
+            _salaryStructureRepository.Update(salaryStructure);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return _mapper.Map<SalaryStructureDto>(salaryStructure);
@@ -144,18 +159,15 @@ public class GenerateMonthlyPayrollCommandHandler : IRequestHandler<GenerateMont
         var netSalary = PayrollCalculator.CalculateNetSalary(salaryStructure.GrossSalary, deductions, payableDays, daysInMonth);
 
         var payroll = await _payrollRepository.GetByEmployeeAndPeriodAsync(request.EmployeeId, request.Year, request.Month, cancellationToken);
-        if (payroll is null)
-        {
-            payroll = new PayrollRecord
-            {
-                EmployeeId = employee.Id,
-                Year = request.Year,
-                Month = request.Month,
-                PayslipNumber = $"PS-{request.Year}{request.Month:D2}-{employee.EmployeeCode}"
-            };
+        var isNewPayroll = payroll is null;
 
-            await _payrollRepository.AddAsync(payroll, cancellationToken);
-        }
+        payroll ??= new PayrollRecord
+        {
+            EmployeeId = employee.Id,
+            Year = request.Year,
+            Month = request.Month,
+            PayslipNumber = $"PS-{request.Year}{request.Month:D2}-{employee.EmployeeCode}"
+        };
 
         payroll.PayableDays = payableDays;
         payroll.LossOfPayDays = totalLossOfPayDays;
@@ -166,9 +178,70 @@ public class GenerateMonthlyPayrollCommandHandler : IRequestHandler<GenerateMont
         payroll.Employee = employee;
         payroll.ModifiedUtc = DateTime.UtcNow;
 
-        _payrollRepository.Update(payroll);
+        if (isNewPayroll)
+        {
+            await _payrollRepository.AddAsync(payroll, cancellationToken);
+        }
+        else
+        {
+            _payrollRepository.Update(payroll);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return _mapper.Map<PayrollRecordDto>(payroll);
+    }
+}
+
+public class GeneratePayrollBatchCommandHandler : IRequestHandler<GeneratePayrollBatchCommand, PayrollBatchResultDto>
+{
+    private readonly IEmployeeRepository _employeeRepository;
+    private readonly IDepartmentRepository _departmentRepository;
+    private readonly ISender _sender;
+
+    public GeneratePayrollBatchCommandHandler(
+        IEmployeeRepository employeeRepository,
+        IDepartmentRepository departmentRepository,
+        ISender sender)
+    {
+        _employeeRepository = employeeRepository;
+        _departmentRepository = departmentRepository;
+        _sender = sender;
+    }
+
+    public async Task<PayrollBatchResultDto> Handle(GeneratePayrollBatchCommand request, CancellationToken cancellationToken)
+    {
+        var employees = await _employeeRepository.GetActiveForPayrollAsync(request.DepartmentId, cancellationToken);
+        var skippedEmployees = new List<string>();
+        var generatedCount = 0;
+
+        foreach (var employee in employees)
+        {
+            if (employee.SalaryStructure is null)
+            {
+                skippedEmployees.Add($"{employee.FullName} ({employee.EmployeeCode})");
+                continue;
+            }
+
+            await _sender.Send(new GenerateMonthlyPayrollCommand(employee.Id, request.Year, request.Month), cancellationToken);
+            generatedCount++;
+        }
+
+        var scope = "All employees";
+        if (request.DepartmentId.HasValue)
+        {
+            var department = await _departmentRepository.GetByIdAsync(request.DepartmentId.Value, cancellationToken)
+                ?? throw new AppException("Department not found.", 404);
+            scope = department.Name;
+        }
+
+        return new PayrollBatchResultDto(
+            request.Year,
+            request.Month,
+            scope,
+            employees.Count,
+            generatedCount,
+            skippedEmployees.Count,
+            skippedEmployees);
     }
 }

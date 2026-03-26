@@ -44,8 +44,13 @@ export function RegisterPage() {
       const response = await apiClient.post<AuthResponse>("/auth/register", form);
       setSession(response.data);
       navigate("/dashboard");
-    } catch (requestError: any) {
-      setMessage(requestError.response?.data?.message ?? "Registration could not be completed.");
+    } catch (error: any) {
+      if (error.response?.data?.errors) {
+        const validationErrors = Object.values(error.response.data.errors).flat().join(" ");
+        setMessage(validationErrors);
+      } else {
+        setMessage(error.response?.data?.message ?? error.response?.data?.title ?? "Registration could not be completed.");
+      }
     } finally {
       setLoading(false);
     }
@@ -73,30 +78,39 @@ export function RegisterPage() {
 
         <form className="panel page-enter space-y-5 p-8 lg:p-10" onSubmit={onSubmit}>
           <div className="grid gap-4 md:grid-cols-2">
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="First name" value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} />
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Last name" value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} />
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Work email" type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} />
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Password" type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Employee code" value={form.employeeCode} onChange={(event) => setForm((current) => ({ ...current, employeeCode: event.target.value }))} />
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Job title" value={form.jobTitle} onChange={(event) => setForm((current) => ({ ...current, jobTitle: event.target.value }))} />
-            <select className="input transition-all duration-300 focus:-translate-y-0.5" value={form.departmentId} onChange={(event) => setForm((current) => ({ ...current, departmentId: event.target.value }))}>
+            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="First name" title="First name" value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} />
+            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Last name" title="Last name" value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} />
+            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Work email" title="Work email" type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} />
+            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Password" title="Password" type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />
+            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Employee code" title="Employee code" value={form.employeeCode} onChange={(event) => setForm((current) => ({ ...current, employeeCode: event.target.value }))} />
+            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Job title" title="Job title" value={form.jobTitle} onChange={(event) => setForm((current) => ({ ...current, jobTitle: event.target.value }))} />
+            <select className="input transition-all duration-300 focus:-translate-y-0.5" title="Department" value={form.departmentId} onChange={(event) => setForm((current) => ({ ...current, departmentId: event.target.value }))}>
+              <option value="" disabled>Select Department</option>
               {departments.map((department) => (
                 <option key={department.id} value={department.id}>
                   {department.name}
                 </option>
               ))}
             </select>
-            <select className="input transition-all duration-300 focus:-translate-y-0.5" value={form.employmentType} onChange={(event) => setForm((current) => ({ ...current, employmentType: event.target.value as EmploymentType }))}>
+            <select className="input transition-all duration-300 focus:-translate-y-0.5" title="Employment Type" value={form.employmentType} onChange={(event) => setForm((current) => ({ ...current, employmentType: event.target.value as EmploymentType }))}>
               <option value="FullTime">Full time</option>
               <option value="PartTime">Part time</option>
               <option value="Contract">Contract</option>
               <option value="Intern">Intern</option>
             </select>
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" type="date" value={form.dateOfBirth} onChange={(event) => setForm((current) => ({ ...current, dateOfBirth: event.target.value }))} />
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" type="date" value={form.joinDate} onChange={(event) => setForm((current) => ({ ...current, joinDate: event.target.value }))} />
+            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Phone number" title="Phone number" value={form.phoneNumber} onChange={(event) => setForm((current) => ({ ...current, phoneNumber: event.target.value }))} />
           </div>
 
-          <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Phone number" value={form.phoneNumber} onChange={(event) => setForm((current) => ({ ...current, phoneNumber: event.target.value }))} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <label className="pl-1 text-xs font-semibold text-slate-500">Date of Birth</label>
+              <input className="input transition-all duration-300 focus:-translate-y-0.5" title="Date of Birth" type="date" value={form.dateOfBirth} onChange={(event) => setForm((current) => ({ ...current, dateOfBirth: event.target.value }))} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="pl-1 text-xs font-semibold text-slate-500">Join Date</label>
+              <input className="input transition-all duration-300 focus:-translate-y-0.5" title="Join Date" type="date" value={form.joinDate} onChange={(event) => setForm((current) => ({ ...current, joinDate: event.target.value }))} />
+            </div>
+          </div>
 
           {message ? <div className="soft-pop rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">{message}</div> : null}
 

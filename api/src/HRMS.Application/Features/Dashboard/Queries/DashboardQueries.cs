@@ -1,7 +1,9 @@
 using AutoMapper;
 using HRMS.Application.Common.Exceptions;
 using HRMS.Application.Common.Interfaces;
+using HRMS.Application.Common.Models;
 using HRMS.Application.DTOs;
+using HRMS.Domain.Enums;
 using MediatR;
 
 namespace HRMS.Application.Features.Dashboard.Queries;
@@ -12,23 +14,48 @@ public record GetEmployeeDashboardQuery() : IRequest<EmployeeDashboardDto>;
 public class GetAdminDashboardQueryHandler : IRequestHandler<GetAdminDashboardQuery, AdminDashboardDto>
 {
     private readonly IDashboardRepository _dashboardRepository;
+    private readonly IEmployeeRepository _employeeRepository;
+    private readonly ILeaveRequestRepository _leaveRequestRepository;
+    private readonly IPayrollRepository _payrollRepository;
+    private readonly IMapper _mapper;
 
-    public GetAdminDashboardQueryHandler(IDashboardRepository dashboardRepository)
+    public GetAdminDashboardQueryHandler(
+        IDashboardRepository dashboardRepository,
+        IEmployeeRepository employeeRepository,
+        ILeaveRequestRepository leaveRequestRepository,
+        IPayrollRepository payrollRepository,
+        IMapper mapper)
     {
         _dashboardRepository = dashboardRepository;
+        _employeeRepository = employeeRepository;
+        _leaveRequestRepository = leaveRequestRepository;
+        _payrollRepository = payrollRepository;
+        _mapper = mapper;
     }
 
     public async Task<AdminDashboardDto> Handle(GetAdminDashboardQuery request, CancellationToken cancellationToken)
     {
         var indiaNow = DateTime.UtcNow.AddHours(5.5);
         var workDate = DateOnly.FromDateTime(indiaNow);
+        var recentEmployees = await _employeeRepository.GetPagedAsync(
+            new EmployeeListFilter(PageNumber: 1, PageSize: 5, SortBy: "joindate", Descending: true),
+            cancellationToken);
+        var pendingLeaves = await _leaveRequestRepository.GetPagedAsync(
+            new LeaveListFilter(Status: LeaveStatus.Pending, PageNumber: 1, PageSize: 5),
+            cancellationToken);
+        var recentPayrolls = await _payrollRepository.GetPagedAsync(
+            new PayrollListFilter(PageNumber: 1, PageSize: 5),
+            cancellationToken);
 
         return new AdminDashboardDto(
             await _dashboardRepository.GetEmployeeCountAsync(cancellationToken),
             await _dashboardRepository.GetDepartmentCountAsync(cancellationToken),
             await _dashboardRepository.GetPendingLeaveCountAsync(cancellationToken),
             await _dashboardRepository.GetEmployeesPresentTodayAsync(workDate, cancellationToken),
-            await _dashboardRepository.GetMonthlyPayrollTotalAsync(indiaNow.Year, indiaNow.Month, cancellationToken));
+            await _dashboardRepository.GetMonthlyPayrollTotalAsync(indiaNow.Year, indiaNow.Month, cancellationToken),
+            _mapper.Map<IReadOnlyCollection<EmployeeDto>>(recentEmployees.Items),
+            _mapper.Map<IReadOnlyCollection<LeaveRequestDto>>(pendingLeaves.Items),
+            _mapper.Map<IReadOnlyCollection<PayrollRecordDto>>(recentPayrolls.Items));
     }
 }
 

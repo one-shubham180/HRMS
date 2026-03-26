@@ -55,12 +55,27 @@ export interface Employee {
 export interface AttendanceRecord {
   id: string;
   employeeId: string;
+  employeeName: string;
   workDate: string;
   checkInUtc: string;
+  checkInCapturedPhotoUtc?: string | null;
+  checkInPhotoUrl?: string | null;
+  checkInLatitude?: number | null;
+  checkInLongitude?: number | null;
+  checkInLocationLabel?: string | null;
   checkOutUtc?: string | null;
+  checkOutCapturedPhotoUtc?: string | null;
+  checkOutPhotoUrl?: string | null;
+  checkOutLatitude?: number | null;
+  checkOutLongitude?: number | null;
+  checkOutLocationLabel?: string | null;
   status: AttendanceStatus;
   workedHours: number;
   notes?: string | null;
+}
+
+export interface AttendanceSettings {
+  requireGeoTaggedPhotoForAttendance: boolean;
 }
 
 export interface LeaveRequest {
@@ -105,12 +120,25 @@ export interface PayrollRecord {
   generatedUtc: string;
 }
 
+export interface PayrollBatchResult {
+  year: number;
+  month: number;
+  scope: string;
+  totalEmployees: number;
+  generatedCount: number;
+  skippedCount: number;
+  skippedEmployees: string[];
+}
+
 export interface AdminDashboard {
   totalEmployees: number;
   totalDepartments: number;
   pendingLeaves: number;
   presentToday: number;
   monthlyPayroll: number;
+  recentEmployees: Employee[];
+  pendingLeaveRequests: LeaveRequest[];
+  recentPayrolls: PayrollRecord[];
 }
 
 export interface EmployeeDashboard {

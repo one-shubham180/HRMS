@@ -3,6 +3,7 @@ import { RequireAuth } from "../components/RequireAuth";
 import { AppLayout } from "../layouts/AppLayout";
 import { AttendancePage } from "../pages/AttendancePage";
 import { DashboardPage } from "../pages/DashboardPage";
+import { DepartmentsPage } from "../pages/DepartmentsPage";
 import { EmployeeDetailPage } from "../pages/EmployeeDetailPage";
 import { EmployeesPage } from "../pages/EmployeesPage";
 import { LeavePage } from "../pages/LeavePage";
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
         children: [
           { path: "/", element: <Navigate to="/dashboard" replace /> },
           { path: "/dashboard", element: <DashboardPage /> },
+          { path: "/departments", element: <DepartmentsPage /> },
           { path: "/employees", element: <EmployeesPage /> },
           { path: "/employees/:employeeId", element: <EmployeeDetailPage /> },
           { path: "/attendance", element: <AttendancePage /> },

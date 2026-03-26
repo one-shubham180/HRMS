@@ -5,8 +5,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Segoe UI Variable"', '"Trebuchet MS"', "sans-serif"],
-        display: ['"Bahnschrift"', '"Segoe UI Variable"', "sans-serif"],
+        sans: ['"Outfit"', "sans-serif"],
+        display: ['"Outfit"', "sans-serif"],
       },
       colors: {
         ink: "#13262f",

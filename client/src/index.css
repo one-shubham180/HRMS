@@ -5,7 +5,7 @@
 :root {
   color: #13262f;
   background: #f7f2eb;
-  font-family: "Segoe UI Variable", "Trebuchet MS", sans-serif;
+  font-family: "Outfit", sans-serif;
 }
 
 body {
@@ -89,4 +89,37 @@ textarea {
 
 .pulse-glow {
   animation: pulse-glow 1.8s ease-in-out infinite;
+}
+
+.app-sidebar {
+  scrollbar-width: none;
+  scrollbar-color: transparent transparent;
+}
+
+.app-sidebar::-webkit-scrollbar {
+  width: 0;
+}
+
+.app-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-sidebar::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: rgba(15, 118, 110, 0.28);
+}
+
+.app-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 118, 110, 0.42);
+}
+
+.app-sidebar:hover,
+.app-sidebar:focus-within {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 118, 110, 0.35) transparent;
+}
+
+.app-sidebar:hover::-webkit-scrollbar,
+.app-sidebar:focus-within::-webkit-scrollbar {
+  width: 8px;
 }

@@ -7,6 +7,7 @@ import type { LeaveRequest, LeaveStatus, LeaveType, PagedResult } from "../types
 
 export function LeavePage() {
   const roles = useAuthStore((state) => state.roles);
+  const employeeId = useAuthStore((state) => state.employeeId);
   const [requests, setRequests] = useState<PagedResult<LeaveRequest> | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -19,14 +20,21 @@ export function LeavePage() {
   const isReviewer = roles.includes("Admin") || roles.includes("HR");
 
   const loadRequests = async () => {
-    const query = isReviewer ? "/leaves?pageNumber=1&pageSize=20" : "/leaves?pageNumber=1&pageSize=20";
+    if (!isReviewer && !employeeId) {
+      setRequests(null);
+      return;
+    }
+
+    const query = isReviewer
+      ? "/leaves?pageNumber=1&pageSize=20"
+      : `/leaves?employeeId=${employeeId}&pageNumber=1&pageSize=20`;
     const response = await apiClient.get<PagedResult<LeaveRequest>>(query);
     setRequests(response.data);
   };
 
   useEffect(() => {
     loadRequests();
-  }, [isReviewer]);
+  }, [employeeId, isReviewer]);
 
   const onApply = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
