@@ -1,0 +1,10 @@
+api/**/bin/
+api/**/obj/
+client/node_modules/
+client/dist/
+client/vite.config.js
+client/vite.config.d.ts
+.dotnet/
+*.user
+*.suo
+.vs/
