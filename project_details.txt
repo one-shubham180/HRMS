@@ -1,0 +1,187 @@
+HRMS Project Details
+=====================
+
+1. Project Overview
+------------------
+- Name: HRMS (Human Resource Management System)
+- Stack:
+  - Backend: ASP.NET Core 8, Clean Architecture, MediatR CQRS, EF Core, SQL Server, ASP.NET Identity, JWT+Refresh, FluentValidation, AutoMapper, Serilog
+  - Frontend: React 18, Vite, TypeScript, React Router v6, Axios, Zustand, Tailwind CSS
+  - Tests: xUnit
+
+2. Repository Structure
+-----------------------
+- api/HRMS.slnx
+  - src/
+    - HRMS.Domain: entities, enums, domain rules
+    - HRMS.Application: DTOs, CQRS handlers (commands/queries), validators, AutoMapper mappings
+    - HRMS.Infrastructure: EF Core context, repository implementations, identity, JWT provider, file storage, seed data
+    - HRMS.Api: controllers, middleware, auth & swagger config, request logging
+  - tests/HRMS.Application.Tests
+- client/
+  - src/
+    - api/ (axios instance + token interceptors)
+    - app/ (routing config)
+    - components/ reusable UI components
+    - features/auth (Zustand auth store)
+    - layouts/ app layout, navigation
+    - pages/ dashboard, attendance, leaves, payroll, login/register
+    - types/ shared TS models
+
+3. Core Modules & Functionality
+------------------------------
+- Authentication: register, login, refresh token, assign role, token persistence
+- Users: roles (Admin, HR, Employee), profile management
+- Employee Management: create, update, remove, profile image upload
+- Department Management: create/edit/delete/list departments
+- Attendance:
+  - check-in/out with proof capture (camera photo + location metadata)
+  - attendance logs with status (Present, Late, HalfDay, Absent)
+- Leave Management:
+  - apply for leave, review leave requests, balance management
+- Payroll:
+  - salary structures, pay slip generation, historical payroll logs
+- Dashboard:
+  - admin/HR overview + employee self summary
+
+4. Implementation Notes
+-----------------------
+- Clean architecture means all business rules in domain/application, outer layers mainly wiring/hosting
+- CQRS using MediatR pipeline for requests and validations
+- FluentValidation used for incoming DTO rules
+- AutoMapper used in application layer for mapping between entities and response/request DTOs
+- Role-based authorization on API endpoints; user-based checks for self-service
+- Pagination everywhere via PagedResult<T>
+- Profile images stored under wwwroot/uploads/profiles
+- API returns DTOs, not domain entities directly
+
+5. Local Setup
+--------------
+Backend:
+- cd d:\HRMS\api
+- $env:DOTNET_CLI_HOME='D:\HRMS\.dotnet'
+- dotnet restore .\HRMS.slnx
+- dotnet run --project .\src\HRMS.Api\HRMS.Api.csproj
+- Base URL: http://localhost:5108 (Swagger: /swagger)
+
+Frontend:
+- cd d:\HRMS\client
+- Copy .env.example to .env
+- npm install
+- npm run dev
+- URL: http://localhost:5173
+
+Database:
+- SQL Server via connection string uses local host alias KAJU with Integrated Security
+- Seed data includes default roles, users, departments, salary structures, attendance/leave sample
+
+6. Key API Endpoints
+---------------------
+- Auth: POST /api/auth/register, /login, /refresh-token, /assign-role
+- Employees: GET /api/employees, GET /api/employees/{id}, POST, PUT, DELETE
+- Attendance: POST /api/attendance/check-in, /check-out, GET /api/attendance/logs
+- Leaves: GET /api/leaves, POST /api/leaves, POST /api/leaves/{id}/review
+- Payroll: GET /api/payroll, POST /api/payroll/salary-structures, /generate
+- Dashboard: GET /api/dashboard/admin, /employee
+
+7. Sample Seed Accounts
+-----------------------
+- Admin: admin@hrms.local / Admin@123
+- HR: hr@hrms.local / Hr@12345
+- Employee: employee@hrms.local / Emp@12345
+
+8. Testing
+----------
+- cd d:\HRMS\api
+- dotnet test .\tests\HRMS.Application.Tests\HRMS.Application.Tests.csproj
+
+9. Page-specific details: AttendancePage (client side)
+-----------------------------------------------------
+- Uses React component with state: cameraOpen, cameraError, capturingProof, proof, logs, settings
+- Includes camera integration via navigator.mediaDevices.getUserMedia
+- Uses geolocation api to stamp attendance photo
+- Uploads photo proof form data to check-in/check-out endpoints
+- Includes UI improvements with Tailwind-based cards and centered video preview
+
+10. Page-specific details: AttendancePage (client side)
+-----------------------------------------------------
+- Uses React component with state: cameraOpen, cameraError, capturingProof, proof, logs, settings
+- Includes camera integration via navigator.mediaDevices.getUserMedia
+- Uses geolocation api to stamp attendance photo
+- Uploads photo proof form data to check-in/check-out endpoints
+- Includes UI improvements with Tailwind-based cards and centered video preview
+
+11. Full Client-side Feature Breakdown
+--------------------------------------
+- Routing and auth guard:
+  - `App.tsx` defines routes for login, register, dashboard, departments, employees, attendance, leaves, payroll
+  - `RequireAuth.tsx` redirects to `/login` when token is missing
+- Layout:
+  - `AppLayout.tsx` sidebar navigation with role filtering (Admin/HR only links for employees & departments)
+  - Sign-out logic clears store and redirects to login
+  - Persistent user info displayed in sidebar (email + roles)
+- Auth store (Zustand):
+  - `authStore.ts` persists user session (`accessToken`, `refreshToken`, `roles`, etc.) in local storage
+- API client:
+  - `api/client.ts` configures Axios base URL and request interceptor for bearer token
+  - response interceptor handles 401 with refresh token flow and retry
+  - fallback to logout and `/login` on refresh failure
+
+Pages:
+- `LoginPage.tsx`:
+  - login form
+  - API call to `/auth/login`
+  - route redirect after login
+  - error handling for network and auth errors
+- `RegisterPage.tsx`:
+  - registration form with department picklist
+  - POST `/auth/register`, auto-login + route to /dashboard
+- `DashboardPage.tsx`:
+  - role-specific content (Admin/HR, Employee)
+  - cards: total employees, departments, leaves, payroll summary, attendance coverage
+  - lists: recent employees, pending leave queue, recent payroll, own attendances/leaves
+- `EmployeesPage.tsx`:
+  - employee directory list + link to details
+  - form to create new employee with fields: first/last name, email, password, job title, etc.
+  - fetch and use department list
+- `EmployeeDetailPage.tsx`:
+  - view/summary details including profile image, leave balances, salary snapshot
+  - form upload profile image to `/employees/{id}/profile-image`
+- `DepartmentsPage.tsx`:
+  - list of departments
+  - form to create new department
+- `AttendancePage.tsx`:
+  - 2 modes: check-in/out dashboard + camera proof stage
+  - geo proof and note input/attendance action forms
+  - logs display (check in/out history)
+  - current style and behavior implemented with `useEffect`, `navigator.mediaDevices`, geo location and blob capture
+- `LeavePage.tsx`:
+  - for employees: apply for leave (leave type, date range, reason)
+  - for HR/Admin: review mode with approve/reject buttons
+  - list leave requests with status and filtering by role
+- `PayrollPage.tsx`:
+  - for Admin/HR: manage salary structures, generate payroll for all/dept/employee
+  - for all: view payroll history with export to CSV
+  - includes payroll config fields: basic, HRA, conveyance, medical, other, PF, tax
+  - uses API endpoints `/payroll/salary-structures`, `/payroll/generate`, `/payroll/export`
+
+12. Themes & common components
+-----------------------------
+- `PageHeader.tsx`: reusable page title+subtitle wrapper
+- `AnimatedPage.tsx`: fade up transitions for page components
+- `StatCard.tsx`: small metric card used on dashboard
+
+13. Developer notes (for major report)
+--------------------------------------
+- each page has role-based conditional rendering
+- data fetching with async `useEffect` and error state
+- UX: toast-style messages in panel, pulsing buttons while actions run
+- form validation is minimal on client side; server-side validation via API responses
+- responsive layout with Tailwind grid and card components
+
+14. Project usage for BTech report
+----------------------------------
+- Mention architecture: layered clean architecture + frontend-react separation
+- Emphasize real-world features: biometric/geo attendance proof, role-based HRMS flows
+- Highlight tech: .NET Core APIs + modern React + token-based auth + state management
+- Validate with tests and deployment paths for local/hybrid production
