@@ -1,9 +1,10 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiClient } from "../api/client";
 import { AnimatedPage } from "../components/AnimatedPage";
 import { DateField } from "../components/DateField";
 import { PageHeader } from "../components/PageHeader";
 import { SelectField } from "../components/SelectField";
+import { TimeField } from "../components/TimeField";
 import { useAuthStore } from "../features/auth/authStore";
 import type { Employee, HolidayCalendar, PagedResult, RosterAssignment, ShiftDefinition } from "../types/hrms";
 
@@ -56,6 +57,24 @@ function getApiErrorMessage(error: any, fallbackMessage: string) {
   return error.response?.data?.message ?? fallbackMessage;
 }
 
+function calculateShiftHours(startTimeLocal: string, endTimeLocal: string, breakMinutes: number) {
+  if (!/^\d{2}:\d{2}$/.test(startTimeLocal) || !/^\d{2}:\d{2}$/.test(endTimeLocal)) {
+    return 0;
+  }
+
+  const [startHour, startMinute] = startTimeLocal.split(":").map(Number);
+  const [endHour, endMinute] = endTimeLocal.split(":").map(Number);
+
+  let startTotalMinutes = startHour * 60 + startMinute;
+  let endTotalMinutes = endHour * 60 + endMinute;
+  if (endTotalMinutes <= startTotalMinutes) {
+    endTotalMinutes += 24 * 60;
+  }
+
+  const effectiveMinutes = Math.max(endTotalMinutes - startTotalMinutes - Math.max(breakMinutes, 0), 0);
+  return Math.round((effectiveMinutes / 60) * 100) / 100;
+}
+
 export function WorkforcePage() {
   const roles = useAuthStore((state) => state.roles);
   const isManagerView = roles.includes("Admin") || roles.includes("HR");
@@ -72,6 +91,10 @@ export function WorkforcePage() {
   const [calendarForm, setCalendarForm] = useState(defaultCalendarForm);
   const [holidayForm, setHolidayForm] = useState(defaultHolidayForm);
   const [rosterForm, setRosterForm] = useState(defaultRosterForm);
+  const calculatedStandardHours = useMemo(
+    () => calculateShiftHours(shiftForm.startTimeLocal, shiftForm.endTimeLocal, shiftForm.breakMinutes),
+    [shiftForm.startTimeLocal, shiftForm.endTimeLocal, shiftForm.breakMinutes],
+  );
 
   const loadWorkforce = async () => {
     setLoading(true);
@@ -125,10 +148,10 @@ export function WorkforcePage() {
     setMessage(null);
 
     try {
-      await apiClient.post("/workforce/shifts", shiftForm);
+      await apiClient.post("/workforce/shifts", { ...shiftForm, standardHours: calculatedStandardHours });
       setShiftForm(defaultShiftForm);
       await loadWorkforce();
-      setMessage("Shift definition created.");
+      setMessage(`Shift definition created. Scheduled hours were calculated automatically as ${calculatedStandardHours} hrs.`);
     } catch (error: any) {
       setMessage(getApiErrorMessage(error, "Saving failed. Could not create shift definition. Please try again."));
     } finally {
@@ -222,15 +245,33 @@ export function WorkforcePage() {
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="pl-1 text-xs font-semibold text-slate-500">Start time</label>
-              <input className="input" type="time" value={shiftForm.startTimeLocal} onChange={(event) => setShiftForm((current) => ({ ...current, startTimeLocal: event.target.value }))} />
+              <TimeField
+                value={shiftForm.startTimeLocal}
+                onChange={(value) => setShiftForm((current) => ({ ...current, startTimeLocal: value }))}
+                placeholder="HH:MM"
+              />
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="pl-1 text-xs font-semibold text-slate-500">End time</label>
-              <input className="input" type="time" value={shiftForm.endTimeLocal} onChange={(event) => setShiftForm((current) => ({ ...current, endTimeLocal: event.target.value }))} />
+              <TimeField
+                value={shiftForm.endTimeLocal}
+                onChange={(value) => setShiftForm((current) => ({ ...current, endTimeLocal: value }))}
+                placeholder="HH:MM"
+              />
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="pl-1 text-xs font-semibold text-slate-500">Standard hours</label>
-              <input className="input" type="number" placeholder="8" value={shiftForm.standardHours} onChange={(event) => setShiftForm((current) => ({ ...current, standardHours: Number(event.target.value) }))} />
+              <input
+                className="input cursor-not-allowed bg-slate-50 text-slate-600"
+                type="number"
+                placeholder="8"
+                value={calculatedStandardHours}
+                readOnly
+                disabled
+              />
+              <p className="pl-1 text-xs text-slate-500">
+                Calculated automatically from start time, end time, and break minutes.
+              </p>
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="pl-1 text-xs font-semibold text-slate-500">Break minutes</label>

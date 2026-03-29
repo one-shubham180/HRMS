@@ -9,6 +9,7 @@ import { EmployeeDetailPage } from "../pages/EmployeeDetailPage";
 import { EmployeesPage } from "../pages/EmployeesPage";
 import { LeavePage } from "../pages/LeavePage";
 import { LoginPage } from "../pages/LoginPage";
+import { MyRosterPage } from "../pages/MyRosterPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { NotificationsPage } from "../pages/NotificationsPage";
 import { PayrollPage } from "../pages/PayrollPage";
@@ -31,6 +32,7 @@ export const router = createBrowserRouter([
           { path: "/employees", element: <EmployeesPage /> },
           { path: "/employees/:employeeId", element: <EmployeeDetailPage /> },
           { path: "/attendance", element: <AttendancePage /> },
+          { path: "/my-roster", element: <MyRosterPage /> },
           { path: "/leaves", element: <LeavePage /> },
           { path: "/payroll", element: <PayrollPage /> },
           { path: "/workforce", element: <WorkforcePage /> },

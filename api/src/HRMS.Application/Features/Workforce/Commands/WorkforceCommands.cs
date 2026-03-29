@@ -4,6 +4,7 @@ using HRMS.Application.Common.Exceptions;
 using HRMS.Application.Common.Interfaces;
 using HRMS.Application.DTOs;
 using HRMS.Domain.Entities;
+using HRMS.Domain.Services;
 using MediatR;
 
 namespace HRMS.Application.Features.Workforce.Commands;
@@ -13,8 +14,8 @@ public record AddHolidayDateCommand(Guid? HolidayCalendarId, DateOnly Date, stri
 public record CreateShiftDefinitionCommand(
     string Name,
     string Code,
-    TimeOnly StartTimeLocal,
-    TimeOnly EndTimeLocal,
+    string StartTimeLocal,
+    string EndTimeLocal,
     decimal StandardHours,
     int BreakMinutes,
     int MinimumOvertimeMinutes) : IRequest<ShiftDefinitionDto>;
@@ -43,9 +44,34 @@ public class CreateShiftDefinitionCommandValidator : AbstractValidator<CreateShi
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(120);
         RuleFor(x => x.Code).NotEmpty().MaximumLength(30);
-        RuleFor(x => x.StandardHours).GreaterThan(0);
+        RuleFor(x => x.StartTimeLocal)
+            .NotEmpty()
+            .Must(BeValidTime)
+            .WithMessage("Start time must be in HH:mm format.");
+        RuleFor(x => x.EndTimeLocal)
+            .NotEmpty()
+            .Must(BeValidTime)
+            .WithMessage("End time must be in HH:mm format.");
         RuleFor(x => x.BreakMinutes).GreaterThanOrEqualTo(0);
         RuleFor(x => x.MinimumOvertimeMinutes).GreaterThanOrEqualTo(0);
+        RuleFor(x => x)
+            .Must(HaveValidShiftWindow)
+            .WithMessage("Shift hours must be greater than zero after subtracting the break.");
+    }
+
+    private static bool BeValidTime(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && TimeOnly.TryParseExact(value.Trim(), "HH:mm", out _);
+
+    private static bool HaveValidShiftWindow(CreateShiftDefinitionCommand command)
+    {
+        if (!BeValidTime(command.StartTimeLocal) || !BeValidTime(command.EndTimeLocal))
+        {
+            return false;
+        }
+
+        var start = TimeOnly.ParseExact(command.StartTimeLocal.Trim(), "HH:mm");
+        var end = TimeOnly.ParseExact(command.EndTimeLocal.Trim(), "HH:mm");
+        return AttendancePolicy.CalculateScheduledHours(start, end, command.BreakMinutes) > 0m;
     }
 }
 
@@ -124,7 +150,7 @@ public class AddHolidayDateCommandHandler : IRequestHandler<AddHolidayDateComman
             throw new AppException("Holiday calendar not found.", 404);
         }
 
-        if (calendar.Holidays.Any(x => x.Date == request.Date))
+        if (await _holidayCalendarRepository.HolidayExistsAsync(calendar.Id, request.Date, cancellationToken))
         {
             throw new AppException("A holiday already exists for the selected date.");
         }
@@ -137,11 +163,12 @@ public class AddHolidayDateCommandHandler : IRequestHandler<AddHolidayDateComman
             IsOptional = request.IsOptional
         };
 
-        calendar.Holidays.Add(holiday);
         calendar.ModifiedUtc = DateTime.UtcNow;
 
         try
         {
+            await _holidayCalendarRepository.AddHolidayAsync(holiday, cancellationToken);
+            _holidayCalendarRepository.Update(calendar);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
         catch (Exception)
@@ -168,13 +195,33 @@ public class CreateShiftDefinitionCommandHandler : IRequestHandler<CreateShiftDe
 
     public async Task<ShiftDefinitionDto> Handle(CreateShiftDefinitionCommand request, CancellationToken cancellationToken)
     {
+        if (!TimeOnly.TryParseExact(request.StartTimeLocal.Trim(), "HH:mm", out var startTimeLocal))
+        {
+            throw new AppException("Start time must be in HH:mm format.", 400);
+        }
+
+        if (!TimeOnly.TryParseExact(request.EndTimeLocal.Trim(), "HH:mm", out var endTimeLocal))
+        {
+            throw new AppException("End time must be in HH:mm format.", 400);
+        }
+
+        var calculatedStandardHours = AttendancePolicy.CalculateScheduledHours(
+            startTimeLocal,
+            endTimeLocal,
+            request.BreakMinutes);
+
+        if (calculatedStandardHours <= 0m)
+        {
+            throw new AppException("Shift hours must be greater than zero after subtracting the break.", 400);
+        }
+
         var shift = new ShiftDefinition
         {
             Name = request.Name.Trim(),
             Code = request.Code.Trim().ToUpperInvariant(),
-            StartTimeLocal = request.StartTimeLocal,
-            EndTimeLocal = request.EndTimeLocal,
-            StandardHours = request.StandardHours,
+            StartTimeLocal = startTimeLocal,
+            EndTimeLocal = endTimeLocal,
+            StandardHours = calculatedStandardHours,
             BreakMinutes = request.BreakMinutes,
             MinimumOvertimeMinutes = request.MinimumOvertimeMinutes
         };

@@ -26,6 +26,14 @@ public static class AttendancePolicy
         return Math.Round(Math.Max(hours, 0), 2, MidpointRounding.AwayFromZero);
     }
 
+    public static decimal CalculateScheduledHours(TimeOnly startTimeLocal, TimeOnly endTimeLocal, int breakMinutes)
+    {
+        var shiftSpanMinutes = CalculateShiftSpanMinutes(startTimeLocal, endTimeLocal);
+        var effectiveMinutes = Math.Max(shiftSpanMinutes - breakMinutes, 0);
+        var hours = effectiveMinutes / 60m;
+        return Math.Round(hours, 2, MidpointRounding.AwayFromZero);
+    }
+
     public static decimal CalculateLossOfPayFactor(AttendanceStatus status, decimal workedHours)
     {
         if (status == AttendanceStatus.HalfDay || workedHours < StandardWorkingHours / 2)
@@ -34,5 +42,18 @@ public static class AttendancePolicy
         }
 
         return 0m;
+    }
+
+    private static int CalculateShiftSpanMinutes(TimeOnly startTimeLocal, TimeOnly endTimeLocal)
+    {
+        var startMinutes = (int)startTimeLocal.ToTimeSpan().TotalMinutes;
+        var endMinutes = (int)endTimeLocal.ToTimeSpan().TotalMinutes;
+
+        if (endMinutes <= startMinutes)
+        {
+            endMinutes += 24 * 60;
+        }
+
+        return endMinutes - startMinutes;
     }
 }

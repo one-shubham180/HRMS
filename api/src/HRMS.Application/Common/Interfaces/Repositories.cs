@@ -19,9 +19,11 @@ public interface IEmployeeRepository
 public interface IHolidayCalendarRepository
 {
     Task AddAsync(HolidayCalendar holidayCalendar, CancellationToken cancellationToken);
+    Task AddHolidayAsync(HolidayDate holidayDate, CancellationToken cancellationToken);
     Task<HolidayCalendar?> GetByIdAsync(Guid holidayCalendarId, CancellationToken cancellationToken);
     Task<HolidayCalendar?> GetDefaultAsync(CancellationToken cancellationToken);
     Task<IReadOnlyCollection<HolidayCalendar>> GetAllAsync(CancellationToken cancellationToken);
+    Task<bool> HolidayExistsAsync(Guid holidayCalendarId, DateOnly date, CancellationToken cancellationToken);
     void Update(HolidayCalendar holidayCalendar);
 }
 
@@ -36,7 +38,12 @@ public interface IRosterAssignmentRepository
 {
     Task AddAsync(RosterAssignment rosterAssignment, CancellationToken cancellationToken);
     Task<RosterAssignment?> GetByEmployeeAndDateAsync(Guid employeeId, DateOnly workDate, CancellationToken cancellationToken);
-    Task<IReadOnlyCollection<RosterAssignment>> GetFilteredAsync(Guid? employeeId, DateOnly? workDate, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<RosterAssignment>> GetFilteredAsync(
+        Guid? employeeId,
+        DateOnly? workDate,
+        DateOnly? startDate,
+        DateOnly? endDate,
+        CancellationToken cancellationToken);
     void Update(RosterAssignment rosterAssignment);
 }
 
@@ -55,6 +62,7 @@ public interface IAttendanceRepository
     Task AddAsync(AttendanceRecord attendanceRecord, CancellationToken cancellationToken);
     Task<AttendanceRecord?> GetOpenAttendanceAsync(Guid employeeId, DateOnly workDate, CancellationToken cancellationToken);
     Task<bool> ExistsForDateAsync(Guid employeeId, DateOnly workDate, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<AttendanceRecord>> GetByDateAsync(DateOnly workDate, CancellationToken cancellationToken);
     Task<PagedResult<AttendanceRecord>> GetPagedAsync(AttendanceLogFilter filter, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<AttendanceRecord>> GetRecentByEmployeeAsync(Guid employeeId, int take, CancellationToken cancellationToken);
     Task<decimal> GetLossOfPayDaysAsync(Guid employeeId, int year, int month, CancellationToken cancellationToken);

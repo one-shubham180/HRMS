@@ -15,6 +15,25 @@ public record GetAttendanceLogsQuery(
     int PageNumber = 1,
     int PageSize = 10) : IRequest<PagedResult<AttendanceRecordDto>>;
 public record GetAttendanceSettingsQuery() : IRequest<AttendanceSettingsDto>;
+public record GetAttendanceExportQuery(DateOnly WorkDate, string Scope) : IRequest<IReadOnlyCollection<AttendanceExportRowDto>>;
+
+public record AttendanceExportRowDto(
+    string EmployeeCode,
+    string EmployeeName,
+    string DepartmentName,
+    string WorkEmail,
+    string JobTitle,
+    string Status,
+    string WorkDate,
+    string? CheckInLocal,
+    string? CheckOutLocal,
+    decimal WorkedHours,
+    decimal ScheduledHours,
+    decimal OvertimeHours,
+    string? ShiftName,
+    string? HolidayName,
+    bool IsRestDay,
+    string? Notes);
 
 public class GetAttendanceLogsQueryHandler : IRequestHandler<GetAttendanceLogsQuery, PagedResult<AttendanceRecordDto>>
 {
@@ -79,5 +98,79 @@ public class GetAttendanceSettingsQueryHandler : IRequestHandler<GetAttendanceSe
     {
         var settings = await _attendanceSettingsRepository.GetCurrentAsync(cancellationToken);
         return new AttendanceSettingsDto(settings?.RequireGeoTaggedPhotoForAttendance ?? false);
+    }
+}
+
+public class GetAttendanceExportQueryHandler
+    : IRequestHandler<GetAttendanceExportQuery, IReadOnlyCollection<AttendanceExportRowDto>>
+{
+    private readonly IEmployeeRepository _employeeRepository;
+    private readonly IAttendanceRepository _attendanceRepository;
+
+    public GetAttendanceExportQueryHandler(
+        IEmployeeRepository employeeRepository,
+        IAttendanceRepository attendanceRepository)
+    {
+        _employeeRepository = employeeRepository;
+        _attendanceRepository = attendanceRepository;
+    }
+
+    public async Task<IReadOnlyCollection<AttendanceExportRowDto>> Handle(
+        GetAttendanceExportQuery request,
+        CancellationToken cancellationToken)
+    {
+        var normalizedScope = (request.Scope ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalizedScope is not ("present" or "absent" or "all"))
+        {
+            throw new AppException("Invalid attendance export scope. Use present, absent, or all.", 400);
+        }
+
+        var employees = await _employeeRepository.GetActiveForPayrollAsync(null, cancellationToken);
+        var attendanceRecords = await _attendanceRepository.GetByDateAsync(request.WorkDate, cancellationToken);
+        var attendanceLookup = attendanceRecords
+            .GroupBy(record => record.EmployeeId)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(record => record.CheckInUtc).First());
+
+        var rows = employees
+            .Select(employee =>
+            {
+                attendanceLookup.TryGetValue(employee.Id, out var attendanceRecord);
+                var status = attendanceRecord?.Status.ToString() ?? "Absent";
+                var includeRow = normalizedScope switch
+                {
+                    "present" => attendanceRecord is not null,
+                    "absent" => attendanceRecord is null,
+                    _ => true
+                };
+
+                if (!includeRow)
+                {
+                    return null;
+                }
+
+                return new AttendanceExportRowDto(
+                    employee.EmployeeCode,
+                    employee.FullName,
+                    employee.Department?.Name ?? "Unassigned",
+                    employee.WorkEmail,
+                    employee.JobTitle,
+                    status,
+                    request.WorkDate.ToString("yyyy-MM-dd"),
+                    attendanceRecord?.CheckInUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                    attendanceRecord?.CheckOutUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                    attendanceRecord?.WorkedHours ?? 0m,
+                    attendanceRecord?.ScheduledHours ?? 0m,
+                    attendanceRecord?.OvertimeHours ?? 0m,
+                    attendanceRecord?.ScheduledShiftName,
+                    attendanceRecord?.HolidayName,
+                    attendanceRecord?.IsRestDay ?? false,
+                    attendanceRecord?.Notes);
+            })
+            .Where(row => row is not null)
+            .Cast<AttendanceExportRowDto>()
+            .OrderBy(row => row.EmployeeName)
+            .ToList();
+
+        return rows;
     }
 }

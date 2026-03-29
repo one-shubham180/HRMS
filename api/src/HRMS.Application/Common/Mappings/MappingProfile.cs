@@ -105,6 +105,10 @@ public class MappingProfile : Profile
                 source.Employee != null ? source.Employee.FullName : string.Empty,
                 source.ShiftDefinitionId,
                 source.ShiftDefinition != null ? source.ShiftDefinition.Name : string.Empty,
+                source.ShiftDefinition != null ? source.ShiftDefinition.StartTimeLocal : null,
+                source.ShiftDefinition != null ? source.ShiftDefinition.EndTimeLocal : null,
+                source.ShiftDefinition != null ? source.ShiftDefinition.StandardHours : 0m,
+                source.ShiftDefinition != null ? source.ShiftDefinition.BreakMinutes : 0,
                 source.WorkDate,
                 source.IsRestDay,
                 source.Notes));

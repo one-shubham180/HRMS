@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 import { AnimatedPage } from "../components/AnimatedPage";
+import { DateField } from "../components/DateField";
 import { PageHeader } from "../components/PageHeader";
 import { SelectField } from "../components/SelectField";
 import { useAuthStore } from "../features/auth/authStore";
@@ -87,8 +88,22 @@ export function LeavePage() {
               onChange={(value) => setForm((current) => ({ ...current, leaveType: value as LeaveType }))}
             />
             <div className="grid gap-4 md:grid-cols-2">
-              <input className="input" type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} />
-              <input className="input" type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} />
+              <div className="flex flex-col gap-1.5">
+                <label className="pl-1 text-xs font-semibold text-slate-500">Start date</label>
+                <DateField
+                  value={form.startDate}
+                  onChange={(value) => setForm((current) => ({ ...current, startDate: value }))}
+                  placeholder="YYYY-MM-DD"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="pl-1 text-xs font-semibold text-slate-500">End date</label>
+                <DateField
+                  value={form.endDate}
+                  onChange={(value) => setForm((current) => ({ ...current, endDate: value }))}
+                  placeholder="YYYY-MM-DD"
+                />
+              </div>
             </div>
             <textarea className="input min-h-32" placeholder="Reason for leave" value={form.reason} onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))} />
             {message ? <div className="soft-pop rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">{message}</div> : null}

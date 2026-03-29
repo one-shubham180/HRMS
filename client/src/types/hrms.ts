@@ -176,6 +176,10 @@ export interface RosterAssignment {
   employeeName: string;
   shiftDefinitionId: string;
   shiftName: string;
+  shiftStartTimeLocal?: string | null;
+  shiftEndTimeLocal?: string | null;
+  shiftHours: number;
+  breakMinutes: number;
   workDate: string;
   isRestDay: boolean;
   notes?: string | null;

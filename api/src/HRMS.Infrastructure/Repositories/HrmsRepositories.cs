@@ -127,6 +127,9 @@ public class HolidayCalendarRepository : IHolidayCalendarRepository
     public Task AddAsync(HolidayCalendar holidayCalendar, CancellationToken cancellationToken) =>
         _context.HolidayCalendars.AddAsync(holidayCalendar, cancellationToken).AsTask();
 
+    public Task AddHolidayAsync(HolidayDate holidayDate, CancellationToken cancellationToken) =>
+        _context.HolidayDates.AddAsync(holidayDate, cancellationToken).AsTask();
+
     public Task<HolidayCalendar?> GetByIdAsync(Guid holidayCalendarId, CancellationToken cancellationToken) =>
         _context.HolidayCalendars
             .Include(x => x.Holidays)
@@ -145,6 +148,9 @@ public class HolidayCalendarRepository : IHolidayCalendarRepository
             .OrderByDescending(x => x.IsDefault)
             .ThenBy(x => x.Name)
             .ToListAsync(cancellationToken);
+
+    public Task<bool> HolidayExistsAsync(Guid holidayCalendarId, DateOnly date, CancellationToken cancellationToken) =>
+        _context.HolidayDates.AnyAsync(x => x.HolidayCalendarId == holidayCalendarId && x.Date == date, cancellationToken);
 
     public void Update(HolidayCalendar holidayCalendar) => _context.HolidayCalendars.Update(holidayCalendar);
 }
@@ -186,7 +192,12 @@ public class RosterAssignmentRepository : IRosterAssignmentRepository
             .Include(x => x.ShiftDefinition)
             .FirstOrDefaultAsync(x => x.EmployeeId == employeeId && x.WorkDate == workDate, cancellationToken);
 
-    public async Task<IReadOnlyCollection<RosterAssignment>> GetFilteredAsync(Guid? employeeId, DateOnly? workDate, CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<RosterAssignment>> GetFilteredAsync(
+        Guid? employeeId,
+        DateOnly? workDate,
+        DateOnly? startDate,
+        DateOnly? endDate,
+        CancellationToken cancellationToken)
     {
         var query = _context.RosterAssignments
             .AsNoTracking()
@@ -204,10 +215,21 @@ public class RosterAssignmentRepository : IRosterAssignmentRepository
             query = query.Where(x => x.WorkDate == workDate.Value);
         }
 
+        if (startDate.HasValue)
+        {
+            query = query.Where(x => x.WorkDate >= startDate.Value);
+        }
+
+        if (endDate.HasValue)
+        {
+            query = query.Where(x => x.WorkDate <= endDate.Value);
+        }
+
         return await query
-            .OrderByDescending(x => x.WorkDate)
+            .OrderBy(x => x.WorkDate)
             .ThenBy(x => x.Employee!.FirstName)
-            .Take(100)
+            .ThenBy(x => x.Employee!.LastName)
+            .Take(150)
             .ToListAsync(cancellationToken);
     }
 
@@ -259,6 +281,16 @@ public class AttendanceRepository : IAttendanceRepository
 
     public Task<bool> ExistsForDateAsync(Guid employeeId, DateOnly workDate, CancellationToken cancellationToken) =>
         _context.AttendanceRecords.AnyAsync(x => x.EmployeeId == employeeId && x.WorkDate == workDate, cancellationToken);
+
+    public async Task<IReadOnlyCollection<AttendanceRecord>> GetByDateAsync(DateOnly workDate, CancellationToken cancellationToken) =>
+        await _context.AttendanceRecords
+            .AsNoTracking()
+            .Include(x => x.Employee)
+            .Include(x => x.RosterAssignment)
+            .Where(x => x.WorkDate == workDate)
+            .OrderBy(x => x.Employee!.FirstName)
+            .ThenBy(x => x.Employee!.LastName)
+            .ToListAsync(cancellationToken);
 
     public async Task<PagedResult<AttendanceRecord>> GetPagedAsync(AttendanceLogFilter filter, CancellationToken cancellationToken)
     {

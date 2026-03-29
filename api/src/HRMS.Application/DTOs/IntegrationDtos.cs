@@ -31,6 +31,10 @@ public record RosterAssignmentDto(
     string EmployeeName,
     Guid ShiftDefinitionId,
     string ShiftName,
+    TimeOnly? ShiftStartTimeLocal,
+    TimeOnly? ShiftEndTimeLocal,
+    decimal ShiftHours,
+    int BreakMinutes,
     DateOnly WorkDate,
     bool IsRestDay,
     string? Notes);

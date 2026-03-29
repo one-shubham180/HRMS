@@ -1,0 +1,102 @@
+%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 6 0 R >> >> /Contents 5 0 R >> endobj
+4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+5 0 obj << /Length 4830 >> stream
+0.99 0.99 0.99 rg 0 0 612 792 re f
+0.07 0.15 0.18 rg 40 676 532 82 re f
+BT /F2 24 Tf 1 1 1 rg 1 0 0 1 58 726 Tm (PAYSLIP) Tj ET
+BT /F1 11 Tf 0.9 0.95 0.96 rg 1 0 0 1 58 704 Tm (Payslip No: PS-202603-EMP003) Tj ET
+BT /F1 10 Tf 0.78 0.87 0.89 rg 1 0 0 1 58 688 Tm (Generated: 29 Mar 2026 02:42 UTC) Tj ET
+BT /F2 14 Tf 1 1 1 rg 1 0 0 1 410.88 723 Tm (NET PAY INR 51,697.00) Tj ET
+BT /F1 10 Tf 0.88 0.94 0.95 rg 1 0 0 1 494.4 703 Tm (Ethan Walker) Tj ET
+BT /F1 10 Tf 0.78 0.87 0.89 rg 1 0 0 1 504 687 Tm (March 2026) Tj ET
+0.94 0.97 0.95 rg 40 600 164 58 re f
+0.9 0.92 0.94 RG 0.8 w 40 600 164 58 re S
+BT /F1 9 Tf 0.38 0.45 0.52 rg 1 0 0 1 56 640 Tm (GROSS SALARY) Tj ET
+BT /F2 18 Tf 0.11 0.16 0.2 rg 1 0 0 1 56 618 Tm (INR 55,797.00) Tj ET
+0.99 0.95 0.91 rg 224 600 164 58 re f
+0.9 0.92 0.94 RG 0.8 w 224 600 164 58 re S
+BT /F1 9 Tf 0.38 0.45 0.52 rg 1 0 0 1 240 640 Tm (DEDUCTIONS) Tj ET
+BT /F2 18 Tf 0.11 0.16 0.2 rg 1 0 0 1 240 618 Tm (INR 4,100.00) Tj ET
+0.93 0.96 0.99 rg 408 600 164 58 re f
+0.9 0.92 0.94 RG 0.8 w 408 600 164 58 re S
+BT /F1 9 Tf 0.38 0.45 0.52 rg 1 0 0 1 424 640 Tm (NET SALARY) Tj ET
+BT /F2 18 Tf 0.11 0.16 0.2 rg 1 0 0 1 424 618 Tm (INR 51,697.00) Tj ET
+1 1 1 rg 40 438 532 140 re f
+0.89 0.91 0.93 RG 0.8 w 40 438 532 140 re S
+0.95 0.97 0.99 rg 40 548 532 30 re f
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 58 559 Tm (Employee Details) Tj ET
+BT /F1 9 Tf 0.45 0.52 0.6 rg 1 0 0 1 58 558 Tm (EMPLOYEE) Tj ET
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 58 544 Tm (Ethan Walker) Tj ET
+BT /F1 9 Tf 0.45 0.52 0.6 rg 1 0 0 1 320 558 Tm (EMPLOYEE CODE) Tj ET
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 320 544 Tm (EMP003) Tj ET
+BT /F1 9 Tf 0.45 0.52 0.6 rg 1 0 0 1 58 530 Tm (DEPARTMENT) Tj ET
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 58 516 Tm (Engineering) Tj ET
+BT /F1 9 Tf 0.45 0.52 0.6 rg 1 0 0 1 320 530 Tm (DESIGNATION) Tj ET
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 320 516 Tm (Software Engineer) Tj ET
+BT /F1 9 Tf 0.45 0.52 0.6 rg 1 0 0 1 58 502 Tm (PAY PERIOD) Tj ET
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 58 488 Tm (March 2026) Tj ET
+BT /F1 9 Tf 0.45 0.52 0.6 rg 1 0 0 1 320 502 Tm (JOIN DATE) Tj ET
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 320 488 Tm (02 Jan 2024) Tj ET
+BT /F1 9 Tf 0.45 0.52 0.6 rg 1 0 0 1 58 474 Tm (PAYABLE DAYS) Tj ET
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 58 460 Tm (31) Tj ET
+BT /F1 9 Tf 0.45 0.52 0.6 rg 1 0 0 1 320 474 Tm (LOSS OF PAY) Tj ET
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 320 460 Tm (0) Tj ET
+1 1 1 rg 40 188 252 222 re f
+0.89 0.91 0.93 RG 0.8 w 40 188 252 222 re S
+0.95 0.97 0.99 rg 40 380 252 30 re f
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 58 391 Tm (Earnings) Tj ET
+BT /F1 9 Tf 0.45 0.52 0.6 rg 1 0 0 1 58 358 Tm (Description) Tj ET
+BT /F1 9 Tf 0.45 0.52 0.6 rg 1 0 0 1 222.16 358 Tm (Amount \(INR\)) Tj ET
+0.89 0.91 0.93 RG 0.8 w 56 350 m 276 350 l S
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 58 330 Tm (Basic Salary) Tj ET
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 230.8 330 Tm (42,000.00) Tj ET
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 58 306 Tm (House Rent Allowance) Tj ET
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 235.6 306 Tm (8,500.00) Tj ET
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 58 282 Tm (Conveyance Allowance) Tj ET
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 235.6 282 Tm (2,500.00) Tj ET
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 58 258 Tm (Medical Allowance) Tj ET
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 235.6 258 Tm (1,800.00) Tj ET
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 58 234 Tm (Other Allowance) Tj ET
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 245.2 234 Tm (997.00) Tj ET
+0.82 0.85 0.89 RG 1 w 56 230 m 276 230 l S
+BT /F2 10 Tf 0.11 0.16 0.2 rg 1 0 0 1 58 208 Tm (Gross Salary) Tj ET
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 226.48 208 Tm (55,797.00) Tj ET
+1 1 1 rg 320 188 252 222 re f
+0.89 0.91 0.93 RG 0.8 w 320 188 252 222 re S
+0.95 0.97 0.99 rg 320 380 252 30 re f
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 338 391 Tm (Deductions) Tj ET
+BT /F1 9 Tf 0.45 0.52 0.6 rg 1 0 0 1 338 358 Tm (Description) Tj ET
+BT /F1 9 Tf 0.45 0.52 0.6 rg 1 0 0 1 502.16 358 Tm (Amount \(INR\)) Tj ET
+0.89 0.91 0.93 RG 0.8 w 336 350 m 556 350 l S
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 338 330 Tm (Provident Fund) Tj ET
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 515.6 330 Tm (1,500.00) Tj ET
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 338 306 Tm (Tax Deduction) Tj ET
+BT /F1 10 Tf 0.17 0.22 0.27 rg 1 0 0 1 515.6 306 Tm (2,600.00) Tj ET
+0.82 0.85 0.89 RG 1 w 336 230 m 556 230 l S
+BT /F2 10 Tf 0.11 0.16 0.2 rg 1 0 0 1 338 208 Tm (Total Deductions) Tj ET
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 511.76 208 Tm (4,100.00) Tj ET
+1 1 1 rg 40 116 532 48 re f
+0.89 0.91 0.93 RG 0.8 w 40 116 532 48 re S
+0.95 0.97 0.99 rg 40 134 532 30 re f
+BT /F2 11 Tf 0.11 0.16 0.2 rg 1 0 0 1 58 145 Tm (Notes) Tj ET
+BT /F1 10 Tf 0.26 0.33 0.39 rg 1 0 0 1 58 136 Tm (This is a system-generated payslip and does not require a physical signature.) Tj ET
+
+endstream endobj
+6 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj
+xref
+0 8
+0000000000 65535 f 
+0000000000 00000 n 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000000321 00000 n 
+0000005203 00000 n 
+trailer << /Size 8 /Root 1 0 R >>
+startxref
+5278
+%%EOF

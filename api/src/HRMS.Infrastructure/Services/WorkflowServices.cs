@@ -1,4 +1,5 @@
 using System.Text;
+using System.Globalization;
 using HRMS.Application.Common.Interfaces;
 using HRMS.Domain.Entities;
 using HRMS.Domain.Enums;
@@ -50,6 +51,10 @@ public class OvertimeService : IOvertimeService
                 rosterAssignment?.IsRestDay == true);
         }
 
+        var scheduledHours = AttendancePolicy.CalculateScheduledHours(
+            shift.StartTimeLocal,
+            shift.EndTimeLocal,
+            shift.BreakMinutes);
         var overtimeHours = 0m;
         if (holiday is not null || rosterAssignment?.IsRestDay == true)
         {
@@ -57,7 +62,7 @@ public class OvertimeService : IOvertimeService
         }
         else
         {
-            var extraHours = Math.Max(workedHours - shift.StandardHours, 0m);
+            var extraHours = Math.Max(workedHours - scheduledHours, 0m);
             overtimeHours = extraHours * 60m >= shift.MinimumOvertimeMinutes ? extraHours : 0m;
         }
 
@@ -66,7 +71,7 @@ public class OvertimeService : IOvertimeService
             shift.Name,
             shift.StartTimeLocal,
             shift.EndTimeLocal,
-            shift.StandardHours,
+            scheduledHours,
             overtimeHours,
             holiday is not null,
             holiday?.Name,
@@ -254,7 +259,7 @@ public class DocumentVaultService : IDocumentVaultService
     public async Task<EmployeeDocument> PublishPayslipAsync(PayrollRecord payrollRecord, CancellationToken cancellationToken)
     {
         var fileName = $"{payrollRecord.PayslipNumber}.pdf";
-        var bytes = BuildSimplePdf(payrollRecord);
+        var bytes = BuildStyledPayslipPdf(payrollRecord);
         await using var stream = new MemoryStream(bytes);
         var storagePath = await _fileStorageService.SaveEmployeeDocumentAsync(stream, fileName, "application/pdf", cancellationToken);
 
@@ -285,22 +290,58 @@ public class DocumentVaultService : IDocumentVaultService
         return document;
     }
 
-    private static byte[] BuildSimplePdf(PayrollRecord payrollRecord)
+    private static byte[] BuildStyledPayslipPdf(PayrollRecord payrollRecord)
     {
         var employeeName = payrollRecord.Employee?.FullName ?? $"Employee {payrollRecord.EmployeeId}";
-        var lines = new[]
+        var salary = payrollRecord.Employee?.SalaryStructure;
+        var periodLabel = new DateTime(payrollRecord.Year, payrollRecord.Month, 1).ToString("MMMM yyyy", CultureInfo.InvariantCulture);
+        var generatedLabel = payrollRecord.GeneratedUtc.ToString("dd MMM yyyy HH:mm 'UTC'", CultureInfo.InvariantCulture);
+
+        var details = new[]
         {
-            $"Payslip {payrollRecord.PayslipNumber}",
-            $"Employee: {employeeName}",
-            $"Period: {payrollRecord.Year}-{payrollRecord.Month:D2}",
-            $"Gross Salary: {payrollRecord.GrossSalary:0.00}",
-            $"Deductions: {payrollRecord.TotalDeductions:0.00}",
-            $"Net Salary: {payrollRecord.NetSalary:0.00}",
-            $"Generated UTC: {payrollRecord.GeneratedUtc:O}"
+            ("Employee", employeeName),
+            ("Employee Code", payrollRecord.Employee?.EmployeeCode ?? "-"),
+            ("Department", payrollRecord.Employee?.Department?.Name ?? "-"),
+            ("Designation", payrollRecord.Employee?.JobTitle ?? "-"),
+            ("Pay Period", periodLabel),
+            ("Join Date", payrollRecord.Employee?.JoinDate.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) ?? "-"),
+            ("Payable Days", payrollRecord.PayableDays.ToString("0.##", CultureInfo.InvariantCulture)),
+            ("Loss Of Pay", payrollRecord.LossOfPayDays.ToString("0.##", CultureInfo.InvariantCulture))
         };
 
-        var escapedText = string.Join("\\n", lines.Select(EscapePdfText));
-        var content = $"BT /F1 12 Tf 50 760 Td ({escapedText}) Tj ET";
+        var earnings = salary is not null
+            ? new List<(string Label, decimal Amount)>
+            {
+                ("Basic Salary", salary.BasicSalary),
+                ("House Rent Allowance", salary.HouseRentAllowance),
+                ("Conveyance Allowance", salary.ConveyanceAllowance),
+                ("Medical Allowance", salary.MedicalAllowance),
+                ("Other Allowance", salary.OtherAllowance),
+            }
+            : new List<(string Label, decimal Amount)>
+            {
+                ("Gross Salary Snapshot", payrollRecord.GrossSalary)
+            };
+
+        var deductions = salary is not null
+            ? new List<(string Label, decimal Amount)>
+            {
+                ("Provident Fund", salary.ProvidentFundDeduction),
+                ("Tax Deduction", salary.TaxDeduction),
+            }
+            : new List<(string Label, decimal Amount)>
+            {
+                ("Total Deductions", payrollRecord.TotalDeductions)
+            };
+
+        var content = BuildPayslipContent(
+            payrollRecord,
+            employeeName,
+            periodLabel,
+            generatedLabel,
+            details,
+            earnings,
+            deductions);
         var contentBytes = Encoding.ASCII.GetBytes(content);
 
         var objects = new[]
@@ -308,9 +349,10 @@ public class DocumentVaultService : IDocumentVaultService
             "%PDF-1.4\n",
             "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n",
             "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n",
-            "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n",
+            "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 6 0 R >> >> /Contents 5 0 R >> endobj\n",
             "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n",
-            $"5 0 obj << /Length {contentBytes.Length} >> stream\n{content}\nendstream endobj\n"
+            $"5 0 obj << /Length {contentBytes.Length} >> stream\n{content}\nendstream endobj\n",
+            "6 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj\n"
         };
 
         using var stream = new MemoryStream();
@@ -338,6 +380,139 @@ public class DocumentVaultService : IDocumentVaultService
         writer.Flush();
         return stream.ToArray();
     }
+
+    private static string BuildPayslipContent(
+        PayrollRecord payrollRecord,
+        string employeeName,
+        string periodLabel,
+        string generatedLabel,
+        IReadOnlyList<(string Label, string Value)> details,
+        IReadOnlyList<(string Label, decimal Amount)> earnings,
+        IReadOnlyList<(string Label, decimal Amount)> deductions)
+    {
+        var builder = new StringBuilder();
+
+        DrawFilledRectangle(builder, 0, 0, 612, 792, 0.99m, 0.99m, 0.99m);
+        DrawFilledRectangle(builder, 40, 676, 532, 82, 0.07m, 0.15m, 0.18m);
+        DrawText(builder, "F2", 24, 58, 726, "PAYSLIP", 1m, 1m, 1m);
+        DrawText(builder, "F1", 11, 58, 704, $"Payslip No: {payrollRecord.PayslipNumber}", 0.90m, 0.95m, 0.96m);
+        DrawText(builder, "F1", 10, 58, 688, $"Generated: {generatedLabel}", 0.78m, 0.87m, 0.89m);
+        DrawRightAlignedText(builder, "F2", 14, 552, 723, $"NET PAY INR {FormatAmount(payrollRecord.NetSalary)}", 1m, 1m, 1m);
+        DrawRightAlignedText(builder, "F1", 10, 552, 703, employeeName, 0.88m, 0.94m, 0.95m);
+        DrawRightAlignedText(builder, "F1", 10, 552, 687, periodLabel, 0.78m, 0.87m, 0.89m);
+
+        DrawSummaryCard(builder, 40, 600, 164, 58, "Gross Salary", payrollRecord.GrossSalary, 0.94m, 0.97m, 0.95m);
+        DrawSummaryCard(builder, 224, 600, 164, 58, "Deductions", payrollRecord.TotalDeductions, 0.99m, 0.95m, 0.91m);
+        DrawSummaryCard(builder, 408, 600, 164, 58, "Net Salary", payrollRecord.NetSalary, 0.93m, 0.96m, 0.99m);
+
+        DrawSectionBox(builder, 40, 426, 532, 152, "Employee Details");
+        var detailStartY = 520m;
+        for (var index = 0; index < details.Count; index += 1)
+        {
+            var column = index % 2;
+            var row = index / 2;
+            var x = column == 0 ? 58m : 320m;
+            var y = detailStartY - (row * 24m);
+            DrawText(builder, "F1", 9, x, y + 10, details[index].Label.ToUpperInvariant(), 0.45m, 0.52m, 0.60m);
+            DrawText(builder, "F2", 11, x, y - 4, details[index].Value, 0.11m, 0.16m, 0.20m);
+        }
+
+        DrawTable(builder, 40, 188, 252, 222, "Earnings", earnings, "Gross Salary", payrollRecord.GrossSalary);
+        DrawTable(builder, 320, 188, 252, 222, "Deductions", deductions, "Total Deductions", payrollRecord.TotalDeductions);
+
+        DrawSectionBox(builder, 40, 116, 532, 48, "Notes");
+        DrawText(builder, "F1", 10, 58, 136, "This is a system-generated payslip and does not require a physical signature.", 0.26m, 0.33m, 0.39m);
+
+        return builder.ToString();
+    }
+
+    private static void DrawSummaryCard(StringBuilder builder, decimal x, decimal y, decimal width, decimal height, string label, decimal amount, decimal r, decimal g, decimal b)
+    {
+        DrawFilledRectangle(builder, x, y, width, height, r, g, b);
+        DrawStrokedRectangle(builder, x, y, width, height, 0.90m, 0.92m, 0.94m, 0.8m);
+        DrawText(builder, "F1", 9, x + 16, y + height - 18, label.ToUpperInvariant(), 0.38m, 0.45m, 0.52m);
+        DrawText(builder, "F2", 18, x + 16, y + 18, $"INR {FormatAmount(amount)}", 0.11m, 0.16m, 0.20m);
+    }
+
+    private static void DrawSectionBox(StringBuilder builder, decimal x, decimal y, decimal width, decimal height, string title)
+    {
+        DrawFilledRectangle(builder, x, y, width, height, 1m, 1m, 1m);
+        DrawStrokedRectangle(builder, x, y, width, height, 0.89m, 0.91m, 0.93m, 0.8m);
+        DrawFilledRectangle(builder, x, y + height - 30, width, 30, 0.95m, 0.97m, 0.99m);
+        DrawText(builder, "F2", 11, x + 18, y + height - 19, title, 0.11m, 0.16m, 0.20m);
+    }
+
+    private static void DrawTable(
+        StringBuilder builder,
+        decimal x,
+        decimal y,
+        decimal width,
+        decimal height,
+        string title,
+        IReadOnlyList<(string Label, decimal Amount)> rows,
+        string totalLabel,
+        decimal totalAmount)
+    {
+        DrawSectionBox(builder, x, y, width, height, title);
+        var top = y + height - 52;
+        DrawText(builder, "F1", 9, x + 18, top, "Description", 0.45m, 0.52m, 0.60m);
+        DrawRightAlignedText(builder, "F1", 9, x + width - 18, top, "Amount (INR)", 0.45m, 0.52m, 0.60m);
+        DrawLine(builder, x + 16, top - 8, x + width - 16, top - 8, 0.89m, 0.91m, 0.93m, 0.8m);
+
+        var currentY = top - 28;
+        foreach (var row in rows)
+        {
+            DrawText(builder, "F1", 10, x + 18, currentY, row.Label, 0.17m, 0.22m, 0.27m);
+            DrawRightAlignedText(builder, "F1", 10, x + width - 18, currentY, FormatAmount(row.Amount), 0.17m, 0.22m, 0.27m);
+            currentY -= 24;
+        }
+
+        DrawLine(builder, x + 16, y + 42, x + width - 16, y + 42, 0.82m, 0.85m, 0.89m, 1m);
+        DrawText(builder, "F2", 10, x + 18, y + 20, totalLabel, 0.11m, 0.16m, 0.20m);
+        DrawRightAlignedText(builder, "F2", 11, x + width - 18, y + 20, FormatAmount(totalAmount), 0.11m, 0.16m, 0.20m);
+    }
+
+    private static void DrawFilledRectangle(StringBuilder builder, decimal x, decimal y, decimal width, decimal height, decimal r, decimal g, decimal b)
+    {
+        builder.AppendFormat(CultureInfo.InvariantCulture, "{0:0.###} {1:0.###} {2:0.###} rg {3:0.##} {4:0.##} {5:0.##} {6:0.##} re f\n", r, g, b, x, y, width, height);
+    }
+
+    private static void DrawStrokedRectangle(StringBuilder builder, decimal x, decimal y, decimal width, decimal height, decimal r, decimal g, decimal b, decimal lineWidth)
+    {
+        builder.AppendFormat(CultureInfo.InvariantCulture, "{0:0.###} {1:0.###} {2:0.###} RG {3:0.##} w {4:0.##} {5:0.##} {6:0.##} {7:0.##} re S\n", r, g, b, lineWidth, x, y, width, height);
+    }
+
+    private static void DrawLine(StringBuilder builder, decimal x1, decimal y1, decimal x2, decimal y2, decimal r, decimal g, decimal b, decimal lineWidth)
+    {
+        builder.AppendFormat(CultureInfo.InvariantCulture, "{0:0.###} {1:0.###} {2:0.###} RG {3:0.##} w {4:0.##} {5:0.##} m {6:0.##} {7:0.##} l S\n", r, g, b, lineWidth, x1, y1, x2, y2);
+    }
+
+    private static void DrawText(StringBuilder builder, string fontName, decimal fontSize, decimal x, decimal y, string text, decimal r, decimal g, decimal b)
+    {
+        builder.AppendFormat(
+            CultureInfo.InvariantCulture,
+            "BT /{0} {1:0.##} Tf {2:0.###} {3:0.###} {4:0.###} rg 1 0 0 1 {5:0.##} {6:0.##} Tm ({7}) Tj ET\n",
+            fontName,
+            fontSize,
+            r,
+            g,
+            b,
+            x,
+            y,
+            EscapePdfText(text));
+    }
+
+    private static void DrawRightAlignedText(StringBuilder builder, string fontName, decimal fontSize, decimal rightX, decimal y, string text, decimal r, decimal g, decimal b)
+    {
+        var estimatedWidth = EstimateTextWidth(text, fontSize);
+        DrawText(builder, fontName, fontSize, rightX - estimatedWidth, y, text, r, g, b);
+    }
+
+    private static decimal EstimateTextWidth(string text, decimal fontSize) =>
+        Math.Max(text.Length * fontSize * 0.48m, 0m);
+
+    private static string FormatAmount(decimal amount) =>
+        amount.ToString("#,##0.00", CultureInfo.InvariantCulture);
 
     private static string EscapePdfText(string value) =>
         value

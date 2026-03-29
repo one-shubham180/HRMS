@@ -2,6 +2,7 @@ using HRMS.Application.Features.Attendance.Commands;
 using HRMS.Application.Features.Attendance.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Text;
 
 namespace HRMS.Api.Controllers;
 
@@ -82,6 +83,57 @@ public class AttendanceController : ApiControllerBase
     {
         var result = await Sender.Send(new GetAttendanceLogsQuery(employeeId, startDate, endDate, pageNumber, pageSize), cancellationToken);
         return Ok(result);
+    }
+
+    [Authorize(Roles = "Admin,HR")]
+    [HttpGet("export")]
+    public async Task<IActionResult> ExportAttendance(
+        [FromQuery] string scope = "all",
+        [FromQuery] DateOnly? workDate = null,
+        CancellationToken cancellationToken = default)
+    {
+        var exportDate = workDate ?? DateOnly.FromDateTime(DateTime.Today);
+        var rows = await Sender.Send(new GetAttendanceExportQuery(exportDate, scope), cancellationToken);
+
+        var csvBuilder = new StringBuilder();
+        csvBuilder.AppendLine(
+            "Employee Code,Employee Name,Department,Work Email,Job Title,Status,Work Date,Check In,Check Out,Worked Hours,Scheduled Hours,Overtime Hours,Shift,Holiday,Rest Day,Notes");
+
+        foreach (var row in rows)
+        {
+            csvBuilder.AppendLine(string.Join(",",
+                EscapeCsv(row.EmployeeCode),
+                EscapeCsv(row.EmployeeName),
+                EscapeCsv(row.DepartmentName),
+                EscapeCsv(row.WorkEmail),
+                EscapeCsv(row.JobTitle),
+                EscapeCsv(row.Status),
+                EscapeCsv(row.WorkDate),
+                EscapeCsv(row.CheckInLocal),
+                EscapeCsv(row.CheckOutLocal),
+                EscapeCsv(row.WorkedHours.ToString("0.##")),
+                EscapeCsv(row.ScheduledHours.ToString("0.##")),
+                EscapeCsv(row.OvertimeHours.ToString("0.##")),
+                EscapeCsv(row.ShiftName),
+                EscapeCsv(row.HolidayName),
+                EscapeCsv(row.IsRestDay ? "Yes" : "No"),
+                EscapeCsv(row.Notes)));
+        }
+
+        var normalizedScope = scope.Trim().ToLowerInvariant();
+        var fileName = $"attendance-{normalizedScope}-{exportDate:yyyy-MM-dd}.csv";
+        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csvBuilder.ToString())).ToArray();
+        return File(bytes, "text/csv", fileName);
+    }
+
+    private static string EscapeCsv(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "\"\"";
+        }
+
+        return $"\"{value.Replace("\"", "\"\"")}\"";
     }
 }
 

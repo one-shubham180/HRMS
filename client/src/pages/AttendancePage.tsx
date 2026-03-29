@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../api/client";
 import { AnimatedPage } from "../components/AnimatedPage";
+import { EmptyStateCard } from "../components/EmptyStateCard";
 import { PageHeader } from "../components/PageHeader";
 import { useAuthStore } from "../features/auth/authStore";
-import type { AttendanceRecord, AttendanceSettings, PagedResult } from "../types/hrms";
+import type { AttendanceRecord, AttendanceSettings, PagedResult, RosterAssignment } from "../types/hrms";
 
 interface AttendanceProof {
     blob: Blob;
@@ -26,6 +27,61 @@ function resolveAssetUrl(path?: string | null) {
 
 function formatDateTime(value?: string | null) {
     return value ? new Date(value).toLocaleString("en-IN") : null;
+}
+
+function formatRosterTime(value?: string | null) {
+    if (!value) {
+        return null;
+    }
+
+    const [hours, minutes] = value.split(":").map(Number);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+        return value;
+    }
+
+    const date = new Date(2026, 0, 1, hours, minutes, 0, 0);
+    return new Intl.DateTimeFormat("en-IN", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+    }).format(date);
+}
+
+function getLocalIsoDate(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function getFileNameFromDisposition(disposition?: string | null) {
+    if (!disposition) {
+        return null;
+    }
+
+    const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utfMatch?.[1]) {
+        return decodeURIComponent(utfMatch[1]);
+    }
+
+    const simpleMatch = disposition.match(/filename="?([^";]+)"?/i);
+    return simpleMatch?.[1] ?? null;
+}
+
+async function getApiErrorMessage(error: any, fallback: string) {
+    const responseData = error?.response?.data;
+
+    if (responseData instanceof Blob) {
+        try {
+            const text = await responseData.text();
+            const parsed = JSON.parse(text);
+            return parsed?.message ?? fallback;
+        } catch {
+            return fallback;
+        }
+    }
+
+    return error?.response?.data?.message ?? fallback;
 }
 
 function getCurrentPositionAsync() {
@@ -57,12 +113,17 @@ export function AttendancePage() {
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [capturingProof, setCapturingProof] = useState(false);
     const [proof, setProof] = useState<AttendanceProof | null>(null);
+    const [myRosters, setMyRosters] = useState<RosterAssignment[]>([]);
+    const [exportingScope, setExportingScope] = useState<"present" | "absent" | "all" | null>(null);
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
 
     const proofRequired = settings?.requireGeoTaggedPhotoForAttendance ?? false;
     const proofStatusText = proofRequired ? "Required for employee attendance" : "Optional";
     const showCameraStage = cameraOpen && proofRequired && canMarkAttendance;
+    const today = getLocalIsoDate();
+    const todaysRoster = myRosters.find((roster) => roster.workDate === today) ?? null;
+    const nextRoster = myRosters.find((roster) => roster.workDate > today) ?? null;
 
     const logTitle = isManagerView ? "Attendance Logs" : "Attendance Logs";
 
@@ -104,8 +165,21 @@ export function AttendancePage() {
         setSettings(response.data);
     };
 
+    const loadMyRosters = async () => {
+        if (isManagerView || !employeeId) {
+            setMyRosters([]);
+            return;
+        }
+
+        const endDate = getLocalIsoDate(new Date(Date.now() + 13 * 24 * 60 * 60 * 1000));
+        const response = await apiClient.get<RosterAssignment[]>(
+            `/workforce/my-rosters?startDate=${today}&endDate=${endDate}`,
+        );
+        setMyRosters(response.data);
+    };
+
     useEffect(() => {
-        void Promise.all([loadLogs(), loadSettings()]);
+        void Promise.all([loadLogs(), loadSettings(), loadMyRosters()]);
 
         return () => {
             stopCamera();
@@ -299,6 +373,39 @@ export function AttendancePage() {
         }
     };
 
+    const exportAttendance = async (scope: "present" | "absent" | "all") => {
+        setExportingScope(scope);
+        setMessage(null);
+
+        try {
+            const workDate = getLocalIsoDate();
+            const response = await apiClient.get(`/attendance/export?scope=${scope}&workDate=${workDate}`, {
+                responseType: "blob",
+            });
+
+            const fallbackFileName = `attendance-${scope}-${workDate}.csv`;
+            const fileName =
+                getFileNameFromDisposition(response.headers["content-disposition"] as string | undefined) ??
+                fallbackFileName;
+            const blob = new Blob([response.data], { type: "text/csv;charset=utf-8;" });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+
+            const label = scope === "all" ? "all employees" : `${scope} employees`;
+            setMessage(`Today's ${label} list was exported successfully.`);
+        } catch (error: any) {
+            setMessage(await getApiErrorMessage(error, "Attendance export failed. Please try again."));
+        } finally {
+            setExportingScope(null);
+        }
+    };
+
     return (
         <AnimatedPage>
             <PageHeader title="Attendance Workspace" subtitle={pageSubtitle} />
@@ -438,6 +545,57 @@ export function AttendancePage() {
                             </div>
                         ) : null}
 
+                        {!isManagerView && canMarkAttendance ? (
+                            <div className="panel soft-pop space-y-4 p-6">
+                                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-lagoon">
+                                    Today&apos;s Shift
+                                </p>
+                                {todaysRoster ? (
+                                    <>
+                                        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                            <div>
+                                                <h2 className="font-display text-2xl text-ink">{todaysRoster.shiftName}</h2>
+                                                <p className="mt-2 text-sm text-slate-600">
+                                                    {todaysRoster.shiftStartTimeLocal && todaysRoster.shiftEndTimeLocal
+                                                        ? `${formatRosterTime(todaysRoster.shiftStartTimeLocal)} to ${formatRosterTime(todaysRoster.shiftEndTimeLocal)}`
+                                                        : "Shift timing will appear after HR completes roster setup."}
+                                                </p>
+                                            </div>
+                                            {todaysRoster.isRestDay ? (
+                                                <span className="badge bg-amber-50 text-amber-700">Rest Day</span>
+                                            ) : (
+                                                <span className="badge bg-lagoon/10 text-lagoon">
+                                                    {todaysRoster.shiftHours} hrs
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="grid gap-3 md:grid-cols-2">
+                                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                                                Break: <span className="font-semibold text-ink">{todaysRoster.breakMinutes} min</span>
+                                            </div>
+                                            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                                                Work date: <span className="font-semibold text-ink">{todaysRoster.workDate}</span>
+                                            </div>
+                                        </div>
+                                        {todaysRoster.notes ? (
+                                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                                                {todaysRoster.notes}
+                                            </div>
+                                        ) : null}
+                                    </>
+                                ) : (
+                                    <EmptyStateCard
+                                        title="No shift assigned for today"
+                                        description={
+                                            nextRoster
+                                                ? `Your next scheduled shift is ${nextRoster.shiftName} on ${nextRoster.workDate}.`
+                                                : "No roster assignment is available right now. Contact HR if you expect to be scheduled."
+                                        }
+                                    />
+                                )}
+                            </div>
+                        ) : null}
+
                         {canMarkAttendance ? (
                             <form
                                 className="panel soft-pop space-y-4 p-6"
@@ -528,7 +686,44 @@ export function AttendancePage() {
                     </div>
 
                     <div className="panel soft-pop p-6 transition-all duration-500">
-                        <h2 className="font-display text-2xl text-ink">{logTitle}</h2>
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div>
+                                <h2 className="font-display text-2xl text-ink">{logTitle}</h2>
+                                {isManagerView ? (
+                                    <p className="mt-2 text-sm text-slate-600">
+                                        Export today&apos;s present, absent, or full active workforce list for HR follow-up.
+                                    </p>
+                                ) : null}
+                            </div>
+                            {isManagerView ? (
+                                <div className="flex flex-col gap-3 sm:flex-row">
+                                    <button
+                                        type="button"
+                                        className={`btn-secondary ${exportingScope === "present" ? "pulse-glow" : ""}`}
+                                        onClick={() => void exportAttendance("present")}
+                                        disabled={exportingScope !== null}
+                                    >
+                                        {exportingScope === "present" ? "Exporting..." : "Export Today Present"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`btn-secondary ${exportingScope === "absent" ? "pulse-glow" : ""}`}
+                                        onClick={() => void exportAttendance("absent")}
+                                        disabled={exportingScope !== null}
+                                    >
+                                        {exportingScope === "absent" ? "Exporting..." : "Export Today Absent"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className={`btn-primary ${exportingScope === "all" ? "pulse-glow" : ""}`}
+                                        onClick={() => void exportAttendance("all")}
+                                        disabled={exportingScope !== null}
+                                    >
+                                        {exportingScope === "all" ? "Exporting..." : "Export Today All"}
+                                    </button>
+                                </div>
+                            ) : null}
+                        </div>
                         <div className="mt-5 space-y-3">
                             {logs?.items.map((record, index) => (
                                 <div
