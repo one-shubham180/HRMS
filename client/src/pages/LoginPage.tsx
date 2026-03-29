@@ -1,5 +1,5 @@
 import { FormEvent, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { apiClient } from "../api/client";
 import { useAuthStore } from "../features/auth/authStore";
 import type { AuthResponse } from "../types/hrms";
@@ -68,7 +68,7 @@ export function LoginPage() {
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-ember">Secure Sign In</p>
             <h2 className="font-display text-3xl text-ink">Welcome back</h2>
-            <p className="text-sm text-slate-600">Use one of the seeded accounts or your own registered profile.</p>
+            <p className="text-sm text-slate-600">Use one of the seeded accounts or the employee account created for you by HR/Admin.</p>
           </div>
 
           <form className="mt-8 space-y-4" onSubmit={onSubmit}>
@@ -93,13 +93,8 @@ export function LoginPage() {
               {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
-
           <p className="mt-6 text-sm text-slate-600">
-            New employee?
-            {" "}
-            <Link className="font-semibold text-lagoon" to="/register">
-              Create an account
-            </Link>
+            New employee accounts are created by HR or Admin users as part of the onboarding workflow.
           </p>
         </section>
       </div>

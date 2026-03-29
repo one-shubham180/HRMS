@@ -16,4 +16,5 @@ public class PayrollRecord : BaseAuditableEntity
     public string PayslipNumber { get; set; } = string.Empty;
 
     public Employee? Employee { get; set; }
+    public ICollection<EmployeeDocument> Documents { get; set; } = new List<EmployeeDocument>();
 }

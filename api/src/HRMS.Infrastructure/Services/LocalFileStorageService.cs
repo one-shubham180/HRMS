@@ -18,6 +18,9 @@ public class LocalFileStorageService : IFileStorageService
     public async Task<string> SaveAttendanceProofImageAsync(Stream stream, string fileName, string? contentType, CancellationToken cancellationToken = default)
         => await SaveFileAsync(stream, fileName, "attendance", cancellationToken);
 
+    public async Task<string> SaveEmployeeDocumentAsync(Stream stream, string fileName, string? contentType, CancellationToken cancellationToken = default)
+        => await SaveFileAsync(stream, fileName, "documents", cancellationToken);
+
     private async Task<string> SaveFileAsync(Stream stream, string fileName, string folderName, CancellationToken cancellationToken)
     {
         var extension = Path.GetExtension(fileName);

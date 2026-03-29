@@ -4,6 +4,7 @@ using HRMS.Application.Common.Exceptions;
 using HRMS.Application.Common.Interfaces;
 using HRMS.Application.DTOs;
 using HRMS.Domain.Entities;
+using HRMS.Domain.Enums;
 using HRMS.Domain.Services;
 using MediatR;
 
@@ -120,6 +121,9 @@ public class GenerateMonthlyPayrollCommandHandler : IRequestHandler<GenerateMont
     private readonly IAttendanceRepository _attendanceRepository;
     private readonly ILeaveRequestRepository _leaveRequestRepository;
     private readonly IPayrollRepository _payrollRepository;
+    private readonly IDocumentVaultService _documentVaultService;
+    private readonly INotificationService _notificationService;
+    private readonly IAuditTrailService _auditTrailService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
 
@@ -129,6 +133,9 @@ public class GenerateMonthlyPayrollCommandHandler : IRequestHandler<GenerateMont
         IAttendanceRepository attendanceRepository,
         ILeaveRequestRepository leaveRequestRepository,
         IPayrollRepository payrollRepository,
+        IDocumentVaultService documentVaultService,
+        INotificationService notificationService,
+        IAuditTrailService auditTrailService,
         IUnitOfWork unitOfWork,
         IMapper mapper)
     {
@@ -137,6 +144,9 @@ public class GenerateMonthlyPayrollCommandHandler : IRequestHandler<GenerateMont
         _attendanceRepository = attendanceRepository;
         _leaveRequestRepository = leaveRequestRepository;
         _payrollRepository = payrollRepository;
+        _documentVaultService = documentVaultService;
+        _notificationService = notificationService;
+        _auditTrailService = auditTrailService;
         _unitOfWork = unitOfWork;
         _mapper = mapper;
     }
@@ -187,6 +197,26 @@ public class GenerateMonthlyPayrollCommandHandler : IRequestHandler<GenerateMont
             _payrollRepository.Update(payroll);
         }
 
+        await _documentVaultService.PublishPayslipAsync(payroll, cancellationToken);
+        await _notificationService.CreateAsync(
+            employee.UserId,
+            null,
+            NotificationType.Payroll,
+            "Payslip Generated",
+            $"Payslip {payroll.PayslipNumber} for {request.Year}-{request.Month:D2} has been published to your document vault.",
+            nameof(PayrollRecord),
+            payroll.Id,
+            cancellationToken);
+        await _auditTrailService.WriteAsync(
+            null,
+            nameof(PayrollRecord),
+            payroll.Id,
+            isNewPayroll ? "PayrollGenerated" : "PayrollRegenerated",
+            null,
+            $"{request.Year}-{request.Month:D2}",
+            payroll.PayslipNumber,
+            null,
+            cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return _mapper.Map<PayrollRecordDto>(payroll);

@@ -168,6 +168,7 @@ public class CheckOutCommandHandler : IRequestHandler<CheckOutCommand, Attendanc
     private readonly IAttendanceSettingsRepository _attendanceSettingsRepository;
     private readonly ICurrentUserService _currentUserService;
     private readonly IFileStorageService _fileStorageService;
+    private readonly IOvertimeService _overtimeService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
 
@@ -177,6 +178,7 @@ public class CheckOutCommandHandler : IRequestHandler<CheckOutCommand, Attendanc
         IAttendanceSettingsRepository attendanceSettingsRepository,
         ICurrentUserService currentUserService,
         IFileStorageService fileStorageService,
+        IOvertimeService overtimeService,
         IUnitOfWork unitOfWork,
         IMapper mapper)
     {
@@ -185,6 +187,7 @@ public class CheckOutCommandHandler : IRequestHandler<CheckOutCommand, Attendanc
         _attendanceSettingsRepository = attendanceSettingsRepository;
         _currentUserService = currentUserService;
         _fileStorageService = fileStorageService;
+        _overtimeService = overtimeService;
         _unitOfWork = unitOfWork;
         _mapper = mapper;
     }
@@ -227,6 +230,23 @@ public class CheckOutCommandHandler : IRequestHandler<CheckOutCommand, Attendanc
         {
             attendance.Status = AttendanceStatus.HalfDay;
         }
+
+        var overtime = await _overtimeService.CalculateAsync(
+            employee,
+            attendance.WorkDate,
+            attendance.CheckInUtc,
+            attendance.CheckOutUtc.Value,
+            cancellationToken);
+
+        attendance.RosterAssignmentId = overtime.RosterAssignmentId;
+        attendance.ScheduledShiftName = overtime.ShiftName;
+        attendance.ScheduledStartTimeLocal = overtime.ScheduledStartTimeLocal;
+        attendance.ScheduledEndTimeLocal = overtime.ScheduledEndTimeLocal;
+        attendance.ScheduledHours = overtime.ScheduledHours;
+        attendance.OvertimeHours = overtime.OvertimeHours;
+        attendance.IsHoliday = overtime.IsHoliday;
+        attendance.HolidayName = overtime.HolidayName;
+        attendance.IsRestDay = overtime.IsRestDay;
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         attendance.Employee = employee;

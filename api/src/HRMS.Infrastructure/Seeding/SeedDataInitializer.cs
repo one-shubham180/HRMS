@@ -54,6 +54,8 @@ public class SeedDataInitializer
         var departments = await _context.Departments.ToListAsync(cancellationToken);
         var hrDepartment = departments.First(x => x.Code == "HR");
         var engDepartment = departments.First(x => x.Code == "ENG");
+        var holidayCalendar = await EnsureDefaultHolidayCalendarAsync(cancellationToken);
+        await EnsureDefaultShiftDefinitionAsync(cancellationToken);
 
         await EnsureSeedUserAsync(
             "admin@hrms.local",
@@ -72,6 +74,7 @@ public class SeedDataInitializer
             1500,
             2500,
             4200,
+            holidayCalendar.Id,
             cancellationToken);
 
         await EnsureSeedUserAsync(
@@ -91,6 +94,7 @@ public class SeedDataInitializer
             1200,
             1800,
             3200,
+            holidayCalendar.Id,
             cancellationToken);
 
         await EnsureSeedUserAsync(
@@ -110,6 +114,7 @@ public class SeedDataInitializer
             1000,
             1500,
             2600,
+            holidayCalendar.Id,
             cancellationToken);
 
         if (!await _context.AttendanceRecords.AnyAsync(cancellationToken))
@@ -192,7 +197,268 @@ IF COL_LENGTH('dbo.Attendance', 'CheckOutLongitude') IS NULL
     ALTER TABLE [dbo].[Attendance] ADD [CheckOutLongitude] decimal(9,6) NULL;
 IF COL_LENGTH('dbo.Attendance', 'CheckOutLocationLabel') IS NULL
     ALTER TABLE [dbo].[Attendance] ADD [CheckOutLocationLabel] nvarchar(200) NULL;
+
+IF COL_LENGTH('dbo.AspNetUsers', 'MustChangePassword') IS NULL
+    ALTER TABLE [dbo].[AspNetUsers] ADD [MustChangePassword] bit NOT NULL CONSTRAINT [DF_AspNetUsers_MustChangePassword] DEFAULT(0);
+IF COL_LENGTH('dbo.AspNetUsers', 'DeactivatedUtc') IS NULL
+    ALTER TABLE [dbo].[AspNetUsers] ADD [DeactivatedUtc] datetime2 NULL;
+IF COL_LENGTH('dbo.AspNetUsers', 'IsActive') IS NULL
+    ALTER TABLE [dbo].[AspNetUsers] ADD [IsActive] bit NOT NULL CONSTRAINT [DF_AspNetUsers_IsActive] DEFAULT(1);
+
+IF COL_LENGTH('dbo.Employees', 'HolidayCalendarId') IS NULL
+    ALTER TABLE [dbo].[Employees] ADD [HolidayCalendarId] uniqueidentifier NULL;
+IF COL_LENGTH('dbo.Employees', 'SourceCandidateId') IS NULL
+    ALTER TABLE [dbo].[Employees] ADD [SourceCandidateId] uniqueidentifier NULL;
+IF COL_LENGTH('dbo.Employees', 'DeactivatedUtc') IS NULL
+    ALTER TABLE [dbo].[Employees] ADD [DeactivatedUtc] datetime2 NULL;
+IF COL_LENGTH('dbo.Employees', 'DeactivatedByUserId') IS NULL
+    ALTER TABLE [dbo].[Employees] ADD [DeactivatedByUserId] uniqueidentifier NULL;
+
+IF COL_LENGTH('dbo.Attendance', 'RosterAssignmentId') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [RosterAssignmentId] uniqueidentifier NULL;
+IF COL_LENGTH('dbo.Attendance', 'ScheduledShiftName') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [ScheduledShiftName] nvarchar(120) NULL;
+IF COL_LENGTH('dbo.Attendance', 'ScheduledStartTimeLocal') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [ScheduledStartTimeLocal] time NULL;
+IF COL_LENGTH('dbo.Attendance', 'ScheduledEndTimeLocal') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [ScheduledEndTimeLocal] time NULL;
+IF COL_LENGTH('dbo.Attendance', 'ScheduledHours') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [ScheduledHours] decimal(8,2) NOT NULL CONSTRAINT [DF_Attendance_ScheduledHours] DEFAULT(0);
+IF COL_LENGTH('dbo.Attendance', 'OvertimeHours') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [OvertimeHours] decimal(8,2) NOT NULL CONSTRAINT [DF_Attendance_OvertimeHours] DEFAULT(0);
+IF COL_LENGTH('dbo.Attendance', 'IsHoliday') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [IsHoliday] bit NOT NULL CONSTRAINT [DF_Attendance_IsHoliday] DEFAULT(0);
+IF COL_LENGTH('dbo.Attendance', 'HolidayName') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [HolidayName] nvarchar(160) NULL;
+IF COL_LENGTH('dbo.Attendance', 'IsRestDay') IS NULL
+    ALTER TABLE [dbo].[Attendance] ADD [IsRestDay] bit NOT NULL CONSTRAINT [DF_Attendance_IsRestDay] DEFAULT(0);
+
+IF OBJECT_ID(N'[dbo].[HolidayCalendars]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[HolidayCalendars] (
+        [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+        [CreatedUtc] datetime2 NOT NULL,
+        [ModifiedUtc] datetime2 NULL,
+        [Name] nvarchar(120) NOT NULL,
+        [Code] nvarchar(30) NOT NULL,
+        [IsDefault] bit NOT NULL
+    );
+    CREATE UNIQUE INDEX [IX_HolidayCalendars_Code] ON [dbo].[HolidayCalendars]([Code]);
+END;
+
+IF OBJECT_ID(N'[dbo].[HolidayDates]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[HolidayDates] (
+        [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+        [CreatedUtc] datetime2 NOT NULL,
+        [ModifiedUtc] datetime2 NULL,
+        [HolidayCalendarId] uniqueidentifier NOT NULL,
+        [Date] date NOT NULL,
+        [Name] nvarchar(160) NOT NULL,
+        [IsOptional] bit NOT NULL,
+        CONSTRAINT [FK_HolidayDates_HolidayCalendars_HolidayCalendarId] FOREIGN KEY ([HolidayCalendarId]) REFERENCES [dbo].[HolidayCalendars]([Id]) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX [IX_HolidayDates_Calendar_Date] ON [dbo].[HolidayDates]([HolidayCalendarId], [Date]);
+END;
+
+IF OBJECT_ID(N'[dbo].[ShiftDefinitions]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[ShiftDefinitions] (
+        [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+        [CreatedUtc] datetime2 NOT NULL,
+        [ModifiedUtc] datetime2 NULL,
+        [Name] nvarchar(120) NOT NULL,
+        [Code] nvarchar(30) NOT NULL,
+        [StartTimeLocal] time NOT NULL,
+        [EndTimeLocal] time NOT NULL,
+        [StandardHours] decimal(8,2) NOT NULL,
+        [BreakMinutes] int NOT NULL,
+        [MinimumOvertimeMinutes] int NOT NULL
+    );
+    CREATE UNIQUE INDEX [IX_ShiftDefinitions_Code] ON [dbo].[ShiftDefinitions]([Code]);
+END;
+
+IF OBJECT_ID(N'[dbo].[RosterAssignments]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[RosterAssignments] (
+        [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+        [CreatedUtc] datetime2 NOT NULL,
+        [ModifiedUtc] datetime2 NULL,
+        [EmployeeId] uniqueidentifier NOT NULL,
+        [ShiftDefinitionId] uniqueidentifier NOT NULL,
+        [WorkDate] date NOT NULL,
+        [IsRestDay] bit NOT NULL,
+        [Notes] nvarchar(400) NULL,
+        CONSTRAINT [FK_RosterAssignments_Employees_EmployeeId] FOREIGN KEY ([EmployeeId]) REFERENCES [dbo].[Employees]([Id]) ON DELETE CASCADE,
+        CONSTRAINT [FK_RosterAssignments_ShiftDefinitions_ShiftDefinitionId] FOREIGN KEY ([ShiftDefinitionId]) REFERENCES [dbo].[ShiftDefinitions]([Id]) ON DELETE NO ACTION
+    );
+    CREATE UNIQUE INDEX [IX_RosterAssignments_EmployeeId_WorkDate] ON [dbo].[RosterAssignments]([EmployeeId], [WorkDate]);
+END;
+
+IF OBJECT_ID(N'[dbo].[Notifications]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[Notifications] (
+        [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+        [CreatedUtc] datetime2 NOT NULL,
+        [ModifiedUtc] datetime2 NULL,
+        [RecipientUserId] uniqueidentifier NOT NULL,
+        [TriggeredByUserId] uniqueidentifier NULL,
+        [Type] int NOT NULL,
+        [Status] int NOT NULL,
+        [Title] nvarchar(160) NOT NULL,
+        [Message] nvarchar(1000) NOT NULL,
+        [RelatedEntityType] nvarchar(80) NOT NULL,
+        [RelatedEntityId] uniqueidentifier NULL,
+        [DeliveredUtc] datetime2 NULL,
+        [ReadUtc] datetime2 NULL
+    );
+    CREATE INDEX [IX_Notifications_RecipientUserId_Status] ON [dbo].[Notifications]([RecipientUserId], [Status]);
+END;
+
+IF OBJECT_ID(N'[dbo].[AuditTrail]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[AuditTrail] (
+        [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+        [CreatedUtc] datetime2 NOT NULL,
+        [ModifiedUtc] datetime2 NULL,
+        [ActorUserId] uniqueidentifier NULL,
+        [NotificationItemId] uniqueidentifier NULL,
+        [EntityType] nvarchar(80) NOT NULL,
+        [EntityId] uniqueidentifier NULL,
+        [Action] nvarchar(120) NOT NULL,
+        [OldState] nvarchar(120) NULL,
+        [NewState] nvarchar(120) NULL,
+        [Metadata] nvarchar(4000) NULL,
+        [OccurredUtc] datetime2 NOT NULL,
+        CONSTRAINT [FK_AuditTrail_Notifications_NotificationItemId] FOREIGN KEY ([NotificationItemId]) REFERENCES [dbo].[Notifications]([Id]) ON DELETE SET NULL
+    );
+    CREATE INDEX [IX_AuditTrail_EntityType_EntityId_OccurredUtc] ON [dbo].[AuditTrail]([EntityType], [EntityId], [OccurredUtc]);
+END;
+
+IF OBJECT_ID(N'[dbo].[EmployeeDocuments]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[EmployeeDocuments] (
+        [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+        [CreatedUtc] datetime2 NOT NULL,
+        [ModifiedUtc] datetime2 NULL,
+        [EmployeeId] uniqueidentifier NOT NULL,
+        [PayrollRecordId] uniqueidentifier NULL,
+        [Category] int NOT NULL,
+        [FileName] nvarchar(255) NOT NULL,
+        [StoragePath] nvarchar(512) NOT NULL,
+        [ContentType] nvarchar(100) NOT NULL,
+        [FileSize] bigint NOT NULL,
+        [IsSystemGenerated] bit NOT NULL,
+        [UploadedByUserId] uniqueidentifier NULL,
+        CONSTRAINT [FK_EmployeeDocuments_Employees_EmployeeId] FOREIGN KEY ([EmployeeId]) REFERENCES [dbo].[Employees]([Id]) ON DELETE CASCADE,
+        CONSTRAINT [FK_EmployeeDocuments_Payroll_PayrollRecordId] FOREIGN KEY ([PayrollRecordId]) REFERENCES [dbo].[Payroll]([Id]) ON DELETE NO ACTION
+    );
+    CREATE INDEX [IX_EmployeeDocuments_EmployeeId_Category_CreatedUtc] ON [dbo].[EmployeeDocuments]([EmployeeId], [Category], [CreatedUtc]);
+END;
+
+IF OBJECT_ID(N'[dbo].[EmployeeDocuments]', N'U') IS NOT NULL
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_EmployeeDocuments_Payroll_PayrollRecordId')
+    BEGIN
+        ALTER TABLE [dbo].[EmployeeDocuments] DROP CONSTRAINT [FK_EmployeeDocuments_Payroll_PayrollRecordId];
+    END;
+
+    IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_EmployeeDocuments_Payroll_PayrollRecordId')
+    BEGIN
+        ALTER TABLE [dbo].[EmployeeDocuments]
+        ADD CONSTRAINT [FK_EmployeeDocuments_Payroll_PayrollRecordId]
+        FOREIGN KEY ([PayrollRecordId]) REFERENCES [dbo].[Payroll]([Id]) ON DELETE NO ACTION;
+    END;
+END;
+
+IF OBJECT_ID(N'[dbo].[Candidates]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[Candidates] (
+        [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+        [CreatedUtc] datetime2 NOT NULL,
+        [ModifiedUtc] datetime2 NULL,
+        [DepartmentId] uniqueidentifier NOT NULL,
+        [ConvertedEmployeeId] uniqueidentifier NULL,
+        [FirstName] nvarchar(100) NOT NULL,
+        [LastName] nvarchar(100) NOT NULL,
+        [Email] nvarchar(256) NOT NULL,
+        [PhoneNumber] nvarchar(20) NULL,
+        [JobTitle] nvarchar(128) NOT NULL,
+        [Status] int NOT NULL,
+        [HiredDate] date NULL,
+        [Notes] nvarchar(1000) NULL,
+        CONSTRAINT [FK_Candidates_Departments_DepartmentId] FOREIGN KEY ([DepartmentId]) REFERENCES [dbo].[Departments]([Id]) ON DELETE NO ACTION
+    );
+    CREATE UNIQUE INDEX [IX_Candidates_Email] ON [dbo].[Candidates]([Email]);
+END;
+
+IF OBJECT_ID(N'[dbo].[PerformanceAppraisals]', N'U') IS NULL
+BEGIN
+    CREATE TABLE [dbo].[PerformanceAppraisals] (
+        [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+        [CreatedUtc] datetime2 NOT NULL,
+        [ModifiedUtc] datetime2 NULL,
+        [EmployeeId] uniqueidentifier NOT NULL,
+        [InitializedFromCandidateId] uniqueidentifier NULL,
+        [CycleName] nvarchar(160) NOT NULL,
+        [StartDate] date NOT NULL,
+        [EndDate] date NOT NULL,
+        [Status] int NOT NULL,
+        [GoalsSummary] nvarchar(2000) NULL,
+        CONSTRAINT [FK_PerformanceAppraisals_Employees_EmployeeId] FOREIGN KEY ([EmployeeId]) REFERENCES [dbo].[Employees]([Id]) ON DELETE CASCADE,
+        CONSTRAINT [FK_PerformanceAppraisals_Candidates_InitializedFromCandidateId] FOREIGN KEY ([InitializedFromCandidateId]) REFERENCES [dbo].[Candidates]([Id]) ON DELETE SET NULL
+    );
+END;
 """, cancellationToken);
+    }
+
+    private async Task<HolidayCalendar> EnsureDefaultHolidayCalendarAsync(CancellationToken cancellationToken)
+    {
+        var calendar = await _context.HolidayCalendars
+            .Include(x => x.Holidays)
+            .FirstOrDefaultAsync(x => x.Code == "IND-DEFAULT", cancellationToken);
+
+        if (calendar is null)
+        {
+            calendar = new HolidayCalendar
+            {
+                Name = "India Default Calendar",
+                Code = "IND-DEFAULT",
+                IsDefault = true,
+                Holidays =
+                {
+                    new HolidayDate { Date = new DateOnly(DateTime.UtcNow.Year, 1, 26), Name = "Republic Day" },
+                    new HolidayDate { Date = new DateOnly(DateTime.UtcNow.Year, 8, 15), Name = "Independence Day" },
+                    new HolidayDate { Date = new DateOnly(DateTime.UtcNow.Year, 10, 2), Name = "Gandhi Jayanti" }
+                }
+            };
+
+            _context.HolidayCalendars.Add(calendar);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        return calendar;
+    }
+
+    private async Task EnsureDefaultShiftDefinitionAsync(CancellationToken cancellationToken)
+    {
+        if (await _context.ShiftDefinitions.AnyAsync(x => x.Code == "GENERAL", cancellationToken))
+        {
+            return;
+        }
+
+        _context.ShiftDefinitions.Add(new ShiftDefinition
+        {
+            Name = "General Shift",
+            Code = "GENERAL",
+            StartTimeLocal = new TimeOnly(9, 0),
+            EndTimeLocal = new TimeOnly(18, 0),
+            StandardHours = 8m,
+            BreakMinutes = 60,
+            MinimumOvertimeMinutes = 30
+        });
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     private async Task EnsureSeedUserAsync(
@@ -212,6 +478,7 @@ IF COL_LENGTH('dbo.Attendance', 'CheckOutLocationLabel') IS NULL
         decimal other,
         decimal providentFund,
         decimal tax,
+        Guid holidayCalendarId,
         CancellationToken cancellationToken)
     {
         var existingUser = await _userManager.Users.FirstOrDefaultAsync(x => x.Email == email, cancellationToken);
@@ -242,6 +509,7 @@ IF COL_LENGTH('dbo.Attendance', 'CheckOutLocationLabel') IS NULL
             {
                 UserId = existingUser.Id,
                 DepartmentId = departmentId,
+                HolidayCalendarId = holidayCalendarId,
                 EmployeeCode = employeeCode,
                 FirstName = firstName,
                 LastName = lastName,
@@ -268,6 +536,15 @@ IF COL_LENGTH('dbo.Attendance', 'CheckOutLocationLabel') IS NULL
             });
 
             await _context.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            var employee = await _context.Employees.FirstAsync(x => x.UserId == existingUser.Id, cancellationToken);
+            if (!employee.HolidayCalendarId.HasValue)
+            {
+                employee.HolidayCalendarId = holidayCalendarId;
+                await _context.SaveChangesAsync(cancellationToken);
+            }
         }
     }
 }

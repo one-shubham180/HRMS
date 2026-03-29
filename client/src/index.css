@@ -24,11 +24,9 @@ body {
 @keyframes page-enter {
   from {
     opacity: 0;
-    transform: translateY(18px) scale(0.985);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }
 
@@ -60,7 +58,7 @@ textarea {
 }
 
 .panel {
-  @apply rounded-3xl border border-white/70 bg-white/85 shadow-panel backdrop-blur transition-all duration-300 hover:shadow-2xl;
+  @apply rounded-3xl border border-white/70 bg-white shadow-panel transition-shadow duration-300 hover:shadow-2xl;
 }
 
 .input {

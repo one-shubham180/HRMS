@@ -1,128 +1,43 @@
-import { FormEvent, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { apiClient } from "../api/client";
-import type { AuthResponse, Department, EmploymentType } from "../types/hrms";
-import { useAuthStore } from "../features/auth/authStore";
+import { Link } from "react-router-dom";
 
 export function RegisterPage() {
-  const navigate = useNavigate();
-  const setSession = useAuthStore((state) => state.setSession);
-
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    password: "",
-    departmentId: "",
-    employeeCode: "",
-    jobTitle: "",
-    dateOfBirth: "1998-01-01",
-    joinDate: new Date().toISOString().slice(0, 10),
-    employmentType: "FullTime" as EmploymentType,
-    phoneNumber: "",
-  });
-
-  useEffect(() => {
-    apiClient.get<Department[]>("/departments").then((response) => {
-      setDepartments(response.data);
-      setForm((current) => ({
-        ...current,
-        departmentId: current.departmentId || response.data[0]?.id || "",
-      }));
-    });
-  }, []);
-
-  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setLoading(true);
-    setMessage(null);
-
-    try {
-      const response = await apiClient.post<AuthResponse>("/auth/register", form);
-      setSession(response.data);
-      navigate("/dashboard");
-    } catch (error: any) {
-      if (error.response?.data?.errors) {
-        const validationErrors = Object.values(error.response.data.errors).flat().join(" ");
-        setMessage(validationErrors);
-      } else {
-        setMessage(error.response?.data?.message ?? error.response?.data?.title ?? "Registration could not be completed.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen px-4 py-8 lg:px-8">
-      <div className="mx-auto grid max-w-6xl items-start gap-8 lg:grid-cols-[0.9fr_1.1fr]">
-        <section className="page-enter panel p-8 lg:sticky lg:top-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-lagoon">Employee Onboarding</p>
-          <h1 className="mt-4 font-display text-4xl text-ink">Create your HRMS profile</h1>
+      <div className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-5xl items-center gap-8 lg:grid-cols-[0.95fr_1.05fr]">
+        <section className="page-enter panel p-8 lg:p-10">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-lagoon">Admin-Driven Onboarding</p>
+          <h1 className="mt-4 font-display text-4xl text-ink">Public registration is disabled</h1>
           <p className="mt-4 text-sm leading-7 text-slate-600">
-            Registration creates a login plus your employee profile, so you can start tracking attendance, requesting leave,
-            and accessing the employee dashboard immediately.
+            Employee accounts are now created by HR or Admin users only. New joiners receive a welcome email and password setup link after their profile is provisioned.
           </p>
           <div className="mt-8 rounded-3xl bg-sand p-5">
-            <p className="text-sm font-semibold text-ink">What happens next</p>
+            <p className="text-sm font-semibold text-ink">What to do instead</p>
             <ul className="mt-3 space-y-2 text-sm text-slate-600">
-              <li>Your account is created with the Employee role.</li>
-              <li>Your department and job profile are stored for dashboard use.</li>
-              <li>You can sign in right away after successful registration.</li>
+              <li>Ask HR or an administrator to create your employee profile.</li>
+              <li>Use the password setup email sent during onboarding.</li>
+              <li>Return to sign in after your account is activated.</li>
             </ul>
           </div>
         </section>
 
-        <form className="panel page-enter space-y-5 p-8 lg:p-10" onSubmit={onSubmit}>
-          <div className="grid gap-4 md:grid-cols-2">
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="First name" title="First name" value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} />
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Last name" title="Last name" value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} />
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Work email" title="Work email" type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} />
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Password" title="Password" type="password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Employee code" title="Employee code" value={form.employeeCode} onChange={(event) => setForm((current) => ({ ...current, employeeCode: event.target.value }))} />
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Job title" title="Job title" value={form.jobTitle} onChange={(event) => setForm((current) => ({ ...current, jobTitle: event.target.value }))} />
-            <select className="input transition-all duration-300 focus:-translate-y-0.5" title="Department" value={form.departmentId} onChange={(event) => setForm((current) => ({ ...current, departmentId: event.target.value }))}>
-              <option value="" disabled>Select Department</option>
-              {departments.map((department) => (
-                <option key={department.id} value={department.id}>
-                  {department.name}
-                </option>
-              ))}
-            </select>
-            <select className="input transition-all duration-300 focus:-translate-y-0.5" title="Employment Type" value={form.employmentType} onChange={(event) => setForm((current) => ({ ...current, employmentType: event.target.value as EmploymentType }))}>
-              <option value="FullTime">Full time</option>
-              <option value="PartTime">Part time</option>
-              <option value="Contract">Contract</option>
-              <option value="Intern">Intern</option>
-            </select>
-            <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Phone number" title="Phone number" value={form.phoneNumber} onChange={(event) => setForm((current) => ({ ...current, phoneNumber: event.target.value }))} />
+        <section className="panel page-enter space-y-5 p-8 lg:p-10">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-ember">Why this changed</p>
+          <h2 className="font-display text-3xl text-ink">Controlled onboarding for enterprise HRMS</h2>
+          <p className="text-sm leading-7 text-slate-600">
+            This workspace now follows an admin-controlled lifecycle so access, auditability, and deactivation rules stay consistent across payroll, attendance, and employee records.
+          </p>
+          <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5">
+            <p className="text-sm font-semibold text-ink">For HR and admins</p>
+            <p className="mt-2 text-sm text-slate-600">
+              Create users from the employee management flow, then guide them to sign in after the welcome email is issued.
+            </p>
           </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <label className="pl-1 text-xs font-semibold text-slate-500">Date of Birth</label>
-              <input className="input transition-all duration-300 focus:-translate-y-0.5" title="Date of Birth" type="date" value={form.dateOfBirth} onChange={(event) => setForm((current) => ({ ...current, dateOfBirth: event.target.value }))} />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="pl-1 text-xs font-semibold text-slate-500">Join Date</label>
-              <input className="input transition-all duration-300 focus:-translate-y-0.5" title="Join Date" type="date" value={form.joinDate} onChange={(event) => setForm((current) => ({ ...current, joinDate: event.target.value }))} />
-            </div>
-          </div>
-
-          {message ? <div className="soft-pop rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800">{message}</div> : null}
-
           <div className="flex flex-col gap-3 sm:flex-row">
-            <button type="submit" className={`btn-primary transition-all duration-300 ${loading ? "pulse-glow" : ""}`} disabled={loading}>
-              {loading ? "Creating profile..." : "Create Account"}
-            </button>
-            <Link className="btn-secondary" to="/login">
+            <Link className="btn-primary" to="/login">
               Back to sign in
             </Link>
           </div>
-        </form>
+        </section>
       </div>
     </div>
   );

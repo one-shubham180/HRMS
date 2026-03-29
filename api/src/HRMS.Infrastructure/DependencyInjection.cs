@@ -40,14 +40,27 @@ public static class DependencyInjection
         services.AddScoped<IFileStorageService, LocalFileStorageService>();
 
         services.AddScoped<IEmployeeRepository, EmployeeRepository>();
+        services.AddScoped<IHolidayCalendarRepository, HolidayCalendarRepository>();
+        services.AddScoped<IShiftDefinitionRepository, ShiftDefinitionRepository>();
+        services.AddScoped<IRosterAssignmentRepository, RosterAssignmentRepository>();
         services.AddScoped<IDepartmentRepository, DepartmentRepository>();
         services.AddScoped<IAttendanceRepository, AttendanceRepository>();
         services.AddScoped<IAttendanceSettingsRepository, AttendanceSettingsRepository>();
         services.AddScoped<ILeaveRequestRepository, LeaveRequestRepository>();
         services.AddScoped<ISalaryStructureRepository, SalaryStructureRepository>();
         services.AddScoped<IPayrollRepository, PayrollRepository>();
+        services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<IAuditTrailRepository, AuditTrailRepository>();
+        services.AddScoped<IEmployeeDocumentRepository, EmployeeDocumentRepository>();
+        services.AddScoped<ICandidateRepository, CandidateRepository>();
+        services.AddScoped<IPerformanceAppraisalRepository, PerformanceAppraisalRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IDashboardRepository, DashboardRepository>();
+        services.AddScoped<IOvertimeService, OvertimeService>();
+        services.AddScoped<IAuditTrailService, AuditTrailService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IOnboardingService, OnboardingService>();
+        services.AddScoped<IDocumentVaultService, DocumentVaultService>();
         services.AddScoped<JwtTokenService>();
         services.AddScoped<SeedDataInitializer>();
 

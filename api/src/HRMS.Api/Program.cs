@@ -1,6 +1,7 @@
 using HRMS.Api.Extensions;
 using HRMS.Api.Middleware;
 using HRMS.Application;
+using HRMS.Application.Common.Interfaces;
 using HRMS.Infrastructure;
 using HRMS.Infrastructure.Identity;
 using HRMS.Infrastructure.Seeding;
@@ -49,6 +50,24 @@ builder.Services.AddAuthentication(options =>
             ValidIssuer = jwtOptions.Issuer,
             ValidAudience = jwtOptions.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key))
+        };
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var userIdValue = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (!Guid.TryParse(userIdValue, out var userId))
+                {
+                    context.Fail("User context is invalid.");
+                    return;
+                }
+
+                var identityService = context.HttpContext.RequestServices.GetRequiredService<IIdentityService>();
+                if (!await identityService.IsUserActiveAsync(userId, context.HttpContext.RequestAborted))
+                {
+                    context.Fail("User account is inactive.");
+                }
+            }
         };
     });
 

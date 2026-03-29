@@ -1,11 +1,16 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { FileClock, LoaderCircle, Save } from "lucide-react";
 import { apiClient } from "../api/client";
 import { AnimatedPage } from "../components/AnimatedPage";
+import { EmptyStateCard } from "../components/EmptyStateCard";
 import { PageHeader } from "../components/PageHeader";
+import { SelectField } from "../components/SelectField";
+import { ToastBanner } from "../components/ToastBanner";
 import { useAuthStore } from "../features/auth/authStore";
 import type { Department, Employee, PagedResult, PayrollBatchResult, PayrollRecord, SalaryStructure } from "../types/hrms";
 
 type PayrollGenerationScope = "all" | "department" | "employee";
+type FeedbackTone = "success" | "error" | "info";
 
 const now = new Date();
 const currentYear = now.getFullYear();
@@ -84,7 +89,7 @@ export function PayrollPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [records, setRecords] = useState<PagedResult<PayrollRecord> | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ tone: FeedbackTone; title: string; message: string } | null>(null);
   const [salaryForm, setSalaryForm] = useState(() => createDefaultSalaryForm());
   const [isLoadingSalaryStructure, setIsLoadingSalaryStructure] = useState(false);
   const [isSavingStructure, setIsSavingStructure] = useState(false);
@@ -103,6 +108,19 @@ export function PayrollPage() {
     month: currentMonth,
     departmentId: "",
   });
+
+  useEffect(() => {
+    if (!feedback) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => setFeedback(null), 3600);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
+
+  const showFeedback = (tone: FeedbackTone, title: string, message: string) => {
+    setFeedback({ tone, title, message });
+  };
 
   const loadSalaryStructure = async (employeeId: string) => {
     const requestId = ++latestSalaryRequestId.current;
@@ -130,7 +148,7 @@ export function PayrollPage() {
         return;
       }
 
-      setMessage(error.response?.data?.message ?? "Could not load salary structure.");
+      showFeedback("error", "Salary structure unavailable", error.response?.data?.message ?? "Could not load salary structure.");
     } finally {
       if (latestSalaryRequestId.current === requestId) {
         setIsLoadingSalaryStructure(false);
@@ -195,21 +213,21 @@ export function PayrollPage() {
   const onSaveStructure = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSavingStructure(true);
-    setMessage(null);
+    setFeedback(null);
 
     try {
       const response = await apiClient.post<SalaryStructure>("/payroll/salary-structures", salaryForm);
       setSalaryForm(mapSalaryStructureToForm(salaryForm.employeeId, response.data));
-      setMessage("Salary structure saved.");
+      showFeedback("success", "Salary structure saved", "Payroll components were updated and are ready for the next payroll run.");
     } catch (error: any) {
-      setMessage(error.response?.data?.message ?? "Could not save salary structure.");
+      showFeedback("error", "Save failed", error.response?.data?.message ?? "Could not save salary structure.");
     } finally {
       setIsSavingStructure(false);
     }
   };
 
   const onSalaryEmployeeChange = async (employeeId: string) => {
-    setMessage(null);
+    setFeedback(null);
     setSalaryForm(createDefaultSalaryForm(employeeId));
     setGenerateForm((current) => ({ ...current, employeeId }));
     await loadSalaryStructure(employeeId);
@@ -218,7 +236,7 @@ export function PayrollPage() {
   const onGenerate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsGeneratingPayroll(true);
-    setMessage(null);
+    setFeedback(null);
 
     try {
       if (generateForm.scope === "employee") {
@@ -227,21 +245,21 @@ export function PayrollPage() {
           year: generateForm.year,
           month: generateForm.month,
         });
-        setMessage("Payroll generated for the selected employee.");
+        showFeedback("success", "Payroll generated", "Payroll was generated for the selected employee.");
       } else {
         const response = await apiClient.post<PayrollBatchResult>("/payroll/generate-batch", {
           departmentId: generateForm.scope === "department" ? generateForm.departmentId : null,
           year: generateForm.year,
           month: generateForm.month,
         });
-        setMessage(buildBatchMessage(response.data));
+        showFeedback("success", "Payroll run completed", buildBatchMessage(response.data));
       }
 
       const nextHistoryFilters = { ...historyFilters, year: generateForm.year, month: generateForm.month };
       setHistoryFilters(nextHistoryFilters);
       await loadHistory(nextHistoryFilters);
     } catch (error: any) {
-      setMessage(error.response?.data?.message ?? "Payroll generation failed.");
+      showFeedback("error", "Payroll generation failed", error.response?.data?.message ?? "Payroll generation failed.");
     } finally {
       setIsGeneratingPayroll(false);
     }
@@ -249,7 +267,7 @@ export function PayrollPage() {
 
   const onExportHistory = async () => {
     setIsExportingPayroll(true);
-    setMessage(null);
+    setFeedback(null);
 
     try {
       const query = new URLSearchParams({
@@ -274,9 +292,9 @@ export function PayrollPage() {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(downloadUrl);
 
-      setMessage(`Payroll history exported for ${historyFilters.month}/${historyFilters.year}.`);
+      showFeedback("success", "Payroll history exported", `CSV export is ready for ${historyFilters.month}/${historyFilters.year}.`);
     } catch (error: any) {
-      setMessage(await getBlobErrorMessage(error, "Payroll export failed."));
+      showFeedback("error", "Payroll export failed", await getBlobErrorMessage(error, "Payroll export failed."));
     } finally {
       setIsExportingPayroll(false);
     }
@@ -296,12 +314,21 @@ export function PayrollPage() {
 
   return (
     <AnimatedPage>
+      {feedback ? (
+        <div className="fixed right-4 top-4 z-50 w-[min(24rem,calc(100vw-2rem))] lg:right-8 lg:top-8">
+          <ToastBanner
+            tone={feedback.tone}
+            title={feedback.title}
+            message={feedback.message}
+            onDismiss={() => setFeedback(null)}
+          />
+        </div>
+      ) : null}
+
       <PageHeader
         title="Payroll"
         subtitle={pageSubtitle}
       />
-
-      {message ? <div className="soft-pop mt-6 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">{message}</div> : null}
 
       <div className={`mt-6 grid gap-6 ${isAdminView ? "xl:grid-cols-[0.95fr_1.05fr]" : ""}`}>
         {isAdminView ? (
@@ -311,11 +338,12 @@ export function PayrollPage() {
               <h2 className="font-display text-2xl text-ink">Configure components</h2>
               <div className="flex flex-col gap-1.5">
                 <label className="pl-1 text-xs font-semibold text-slate-500">Employee</label>
-                <select className="input" value={salaryForm.employeeId} onChange={(event) => void onSalaryEmployeeChange(event.target.value)}>
-                  {employees.map((employee) => (
-                    <option key={employee.id} value={employee.id}>{employee.fullName}</option>
-                  ))}
-                </select>
+                <SelectField
+                  value={salaryForm.employeeId}
+                  options={employees.map((employee) => ({ value: employee.id, label: employee.fullName }))}
+                  onChange={(value) => void onSalaryEmployeeChange(value)}
+                  placeholder="Select employee"
+                />
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 {salaryFields.map(([key, label]) => (
@@ -333,11 +361,27 @@ export function PayrollPage() {
               </div>
               <button
                 type="submit"
-                className="btn-primary disabled:cursor-not-allowed disabled:opacity-70"
+                className="btn-primary gap-2 disabled:cursor-not-allowed disabled:opacity-70"
                 disabled={isSavingStructure || isLoadingSalaryStructure || !salaryForm.employeeId}
               >
-                {isSavingStructure ? "Saving..." : isLoadingSalaryStructure ? "Loading..." : "Save Salary Structure"}
+                {isSavingStructure ? (
+                  <>
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    Saving structure...
+                  </>
+                ) : isLoadingSalaryStructure ? (
+                  <>
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                    Loading structure...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save Salary Structure
+                  </>
+                )}
               </button>
+              {isSavingStructure ? <p className="text-sm text-slate-500">Updating salary components and refreshing the structure in payroll.</p> : null}
             </form>
 
             <form className="panel space-y-4 p-6" onSubmit={onGenerate}>
@@ -346,42 +390,36 @@ export function PayrollPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <label className="pl-1 text-xs font-semibold text-slate-500">Scope</label>
-                  <select
-                    className="input"
+                  <SelectField
                     value={generateForm.scope}
-                    onChange={(event) => setGenerateForm((current) => ({ ...current, scope: event.target.value as PayrollGenerationScope }))}
-                  >
-                    <option value="all">All employees</option>
-                    <option value="department">Department</option>
-                    <option value="employee">Single employee</option>
-                  </select>
+                    options={[
+                      { value: "all", label: "All employees" },
+                      { value: "department", label: "Department" },
+                      { value: "employee", label: "Single employee" },
+                    ]}
+                    onChange={(value) => setGenerateForm((current) => ({ ...current, scope: value as PayrollGenerationScope }))}
+                  />
                 </div>
                 {generateForm.scope === "department" ? (
                   <div className="flex flex-col gap-1.5">
                     <label className="pl-1 text-xs font-semibold text-slate-500">Department</label>
-                    <select
-                      className="input"
+                    <SelectField
                       value={generateForm.departmentId}
-                      onChange={(event) => setGenerateForm((current) => ({ ...current, departmentId: event.target.value }))}
-                    >
-                      {departments.map((department) => (
-                        <option key={department.id} value={department.id}>{department.name}</option>
-                      ))}
-                    </select>
+                      options={departments.map((department) => ({ value: department.id, label: department.name }))}
+                      onChange={(value) => setGenerateForm((current) => ({ ...current, departmentId: value }))}
+                      placeholder="Select department"
+                    />
                   </div>
                 ) : null}
                 {generateForm.scope === "employee" ? (
                   <div className="flex flex-col gap-1.5">
                     <label className="pl-1 text-xs font-semibold text-slate-500">Employee</label>
-                    <select
-                      className="input"
+                    <SelectField
                       value={generateForm.employeeId}
-                      onChange={(event) => setGenerateForm((current) => ({ ...current, employeeId: event.target.value }))}
-                    >
-                      {employees.map((employee) => (
-                        <option key={employee.id} value={employee.id}>{employee.fullName}</option>
-                      ))}
-                    </select>
+                      options={employees.map((employee) => ({ value: employee.id, label: employee.fullName }))}
+                      onChange={(value) => setGenerateForm((current) => ({ ...current, employeeId: value }))}
+                      placeholder="Select employee"
+                    />
                   </div>
                 ) : null}
               </div>
@@ -425,12 +463,14 @@ export function PayrollPage() {
             {isAdminView ? (
               <div className="flex flex-col gap-1.5">
                 <label className="pl-1 text-xs font-semibold text-slate-500">Department</label>
-                <select className="input" value={historyFilters.departmentId} onChange={(event) => setHistoryFilters((current) => ({ ...current, departmentId: event.target.value }))}>
-                  <option value="">All departments</option>
-                  {departments.map((department) => (
-                    <option key={department.id} value={department.id}>{department.name}</option>
-                  ))}
-                </select>
+                <SelectField
+                  value={historyFilters.departmentId}
+                  options={[
+                    { value: "", label: "All departments" },
+                    ...departments.map((department) => ({ value: department.id, label: department.name })),
+                  ]}
+                  onChange={(value) => setHistoryFilters((current) => ({ ...current, departmentId: value }))}
+                />
               </div>
             ) : null}
           </div>
@@ -458,9 +498,11 @@ export function PayrollPage() {
                 </div>
               </div>
             )) : (
-              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-600">
-                No payroll records were found for {historyFilters.month}/{historyFilters.year}.
-              </div>
+              <EmptyStateCard
+                title="No payslip history found"
+                description={`There are no payroll records for ${historyFilters.month}/${historyFilters.year} yet. Try another period or generate payroll for this cycle first.`}
+                icon={<FileClock className="h-8 w-8 text-ember" strokeWidth={1.8} />}
+              />
             )}
           </div>
         </div>

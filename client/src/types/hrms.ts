@@ -3,6 +3,11 @@ export type EmploymentType = "FullTime" | "PartTime" | "Contract" | "Intern";
 export type LeaveType = "Annual" | "Sick" | "Casual" | "Unpaid";
 export type LeaveStatus = "Pending" | "Approved" | "Rejected";
 export type AttendanceStatus = "Present" | "Late" | "HalfDay" | "Absent";
+export type CandidateStatus = "Applied" | "Screening" | "Interviewing" | "Offered" | "Hired" | "Rejected";
+export type AppraisalStatus = "Initialized" | "InProgress" | "Completed" | "Archived";
+export type DocumentCategory = "IdProof" | "Contract" | "Resume" | "Payslip" | "OfferLetter" | "Other";
+export type NotificationStatus = "Pending" | "Delivered" | "Read" | "Failed";
+export type NotificationType = "Leave" | "Payroll" | "Onboarding" | "Recruitment" | "General";
 
 export interface AuthResponse {
   accessToken: string;
@@ -56,6 +61,7 @@ export interface AttendanceRecord {
   id: string;
   employeeId: string;
   employeeName: string;
+  rosterAssignmentId?: string | null;
   workDate: string;
   checkInUtc: string;
   checkInCapturedPhotoUtc?: string | null;
@@ -71,6 +77,14 @@ export interface AttendanceRecord {
   checkOutLocationLabel?: string | null;
   status: AttendanceStatus;
   workedHours: number;
+  scheduledShiftName?: string | null;
+  scheduledStartTimeLocal?: string | null;
+  scheduledEndTimeLocal?: string | null;
+  scheduledHours: number;
+  overtimeHours: number;
+  isHoliday: boolean;
+  holidayName?: string | null;
+  isRestDay: boolean;
   notes?: string | null;
 }
 
@@ -128,6 +142,112 @@ export interface PayrollBatchResult {
   generatedCount: number;
   skippedCount: number;
   skippedEmployees: string[];
+}
+
+export interface HolidayDate {
+  id: string;
+  date: string;
+  name: string;
+  isOptional: boolean;
+}
+
+export interface HolidayCalendar {
+  id: string;
+  name: string;
+  code: string;
+  isDefault: boolean;
+  holidays: HolidayDate[];
+}
+
+export interface ShiftDefinition {
+  id: string;
+  name: string;
+  code: string;
+  startTimeLocal: string;
+  endTimeLocal: string;
+  standardHours: number;
+  breakMinutes: number;
+  minimumOvertimeMinutes: number;
+}
+
+export interface RosterAssignment {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  shiftDefinitionId: string;
+  shiftName: string;
+  workDate: string;
+  isRestDay: boolean;
+  notes?: string | null;
+}
+
+export interface NotificationItem {
+  id: string;
+  recipientUserId: string;
+  triggeredByUserId?: string | null;
+  type: NotificationType;
+  status: NotificationStatus;
+  title: string;
+  message: string;
+  relatedEntityType: string;
+  relatedEntityId?: string | null;
+  deliveredUtc?: string | null;
+  readUtc?: string | null;
+}
+
+export interface AuditTrailEntry {
+  id: string;
+  actorUserId?: string | null;
+  notificationItemId?: string | null;
+  entityType: string;
+  entityId?: string | null;
+  action: string;
+  oldState?: string | null;
+  newState?: string | null;
+  metadata?: string | null;
+  occurredUtc: string;
+}
+
+export interface EmployeeDocument {
+  id: string;
+  employeeId: string;
+  payrollRecordId?: string | null;
+  category: DocumentCategory;
+  fileName: string;
+  storagePath: string;
+  contentType: string;
+  fileSize: number;
+  isSystemGenerated: boolean;
+  uploadedByUserId?: string | null;
+  createdUtc: string;
+}
+
+export interface Candidate {
+  id: string;
+  departmentId: string;
+  departmentName: string;
+  convertedEmployeeId?: string | null;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  email: string;
+  phoneNumber?: string | null;
+  jobTitle: string;
+  status: CandidateStatus;
+  hiredDate?: string | null;
+  notes?: string | null;
+}
+
+export interface PerformanceAppraisal {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  initializedFromCandidateId?: string | null;
+  cycleName: string;
+  startDate: string;
+  endDate: string;
+  status: AppraisalStatus;
+  goalsSummary?: string | null;
 }
 
 export interface AdminDashboard {

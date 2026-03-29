@@ -6,7 +6,7 @@ namespace HRMS.Api.Controllers;
 
 public class AuthController : ApiControllerBase
 {
-    [AllowAnonymous]
+    [Authorize(Roles = "Admin,HR")]
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterCommand command, CancellationToken cancellationToken)
     {

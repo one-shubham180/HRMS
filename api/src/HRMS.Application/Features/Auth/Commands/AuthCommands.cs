@@ -86,56 +86,9 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, AuthRespo
         _unitOfWork = unitOfWork;
     }
 
-    public async Task<AuthResponseDto> Handle(RegisterCommand request, CancellationToken cancellationToken)
+    public Task<AuthResponseDto> Handle(RegisterCommand request, CancellationToken cancellationToken)
     {
-        var department = await _departmentRepository.GetByIdAsync(request.DepartmentId, cancellationToken)
-            ?? throw new AppException("Department was not found.", (int)HttpStatusCode.NotFound);
-
-        if (await _employeeRepository.ExistsByEmployeeCodeAsync(request.EmployeeCode, cancellationToken))
-        {
-            throw new AppException("Employee code is already in use.");
-        }
-
-        if (await _employeeRepository.ExistsByWorkEmailAsync(request.Email, cancellationToken))
-        {
-            throw new AppException("Work email is already in use.");
-        }
-
-        var authResult = await _identityService.RegisterAsync(
-            request.FirstName,
-            request.LastName,
-            request.Email,
-            request.Password,
-            ApplicationRoles.Employee,
-            cancellationToken);
-
-        var employee = new Employee
-        {
-            UserId = authResult.UserId,
-            DepartmentId = department.Id,
-            Department = department,
-            EmployeeCode = request.EmployeeCode.Trim(),
-            FirstName = request.FirstName.Trim(),
-            LastName = request.LastName.Trim(),
-            WorkEmail = request.Email.Trim().ToLowerInvariant(),
-            PhoneNumber = request.PhoneNumber?.Trim(),
-            DateOfBirth = request.DateOfBirth,
-            JoinDate = request.JoinDate,
-            JobTitle = request.JobTitle.Trim(),
-            EmploymentType = request.EmploymentType
-        };
-
-        await _employeeRepository.AddAsync(employee, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return new AuthResponseDto(
-            authResult.AccessToken,
-            authResult.RefreshToken,
-            authResult.ExpiresUtc,
-            authResult.UserId,
-            authResult.Email,
-            authResult.Roles,
-            employee.Id);
+        throw new AppException("Public self-registration is disabled. An administrator must create employee accounts.", (int)HttpStatusCode.Forbidden);
     }
 }
 

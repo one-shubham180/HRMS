@@ -1,3 +1,16 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  BellRing,
+  BriefcaseBusiness,
+  Building2,
+  CalendarClock,
+  ClipboardCheck,
+  FolderLock,
+  LayoutDashboard,
+  PlaneTakeoff,
+  Users,
+  WalletCards,
+} from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../features/auth/authStore";
 
@@ -9,13 +22,17 @@ export function AppLayout() {
   const navigate = useNavigate();
   const { roles, email, clearSession } = useAuthStore();
 
-  const navigation = [
-    { to: "/dashboard", label: "Dashboard" },
-    { to: "/employees", label: "Employees", roles: ["Admin", "HR"] },
-    { to: "/departments", label: "Departments", roles: ["Admin", "HR"] },
-    { to: "/attendance", label: "Attendance" },
-    { to: "/leaves", label: "Leaves" },
-    { to: "/payroll", label: "Payroll" },
+  const navigation: { to: string; label: string; roles?: string[]; icon: LucideIcon }[] = [
+    { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { to: "/employees", label: "Employees", roles: ["Admin", "HR"], icon: Users },
+    { to: "/departments", label: "Departments", roles: ["Admin", "HR"], icon: Building2 },
+    { to: "/workforce", label: "Workforce", roles: ["Admin", "HR"], icon: CalendarClock },
+    { to: "/attendance", label: "Attendance", icon: ClipboardCheck },
+    { to: "/leaves", label: "Leaves", icon: PlaneTakeoff },
+    { to: "/payroll", label: "Payroll", icon: WalletCards },
+    { to: "/documents", label: "Documents", icon: FolderLock },
+    { to: "/notifications", label: "Notifications", icon: BellRing },
+    { to: "/talent", label: "Talent", icon: BriefcaseBusiness },
   ].filter((item) => hasAnyRole(roles, item.roles));
 
   const onLogout = () => {
@@ -40,11 +57,12 @@ export function AppLayout() {
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) =>
-                    `flex items-center rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                    `flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
                       isActive ? "bg-ink text-white" : "text-slate-700 hover:bg-slate-100"
                     }`
                   }
                 >
+                  <item.icon className="h-4 w-4 shrink-0" strokeWidth={2.1} />
                   {item.label}
                 </NavLink>
               ))}

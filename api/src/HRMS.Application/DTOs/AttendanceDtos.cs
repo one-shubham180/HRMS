@@ -6,6 +6,7 @@ public record AttendanceRecordDto(
     Guid Id,
     Guid EmployeeId,
     string EmployeeName,
+    Guid? RosterAssignmentId,
     DateOnly WorkDate,
     DateTime CheckInUtc,
     DateTime? CheckInCapturedPhotoUtc,
@@ -21,6 +22,14 @@ public record AttendanceRecordDto(
     string? CheckOutLocationLabel,
     AttendanceStatus Status,
     decimal WorkedHours,
+    string? ScheduledShiftName,
+    TimeOnly? ScheduledStartTimeLocal,
+    TimeOnly? ScheduledEndTimeLocal,
+    decimal ScheduledHours,
+    decimal OvertimeHours,
+    bool IsHoliday,
+    string? HolidayName,
+    bool IsRestDay,
     string? Notes);
 
 public record AttendanceSettingsDto(bool RequireGeoTaggedPhotoForAttendance);

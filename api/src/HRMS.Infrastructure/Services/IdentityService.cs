@@ -50,7 +50,8 @@ public class IdentityService : IIdentityService
             Email = email.Trim().ToLowerInvariant(),
             FirstName = firstName.Trim(),
             LastName = lastName.Trim(),
-            EmailConfirmed = true
+            EmailConfirmed = true,
+            MustChangePassword = false
         };
 
         var result = await _userManager.CreateAsync(user, password);
@@ -69,6 +70,8 @@ public class IdentityService : IIdentityService
         var normalizedEmail = email.Trim().ToLowerInvariant();
         var user = await _userManager.Users.FirstOrDefaultAsync(x => x.Email == normalizedEmail, cancellationToken)
             ?? throw new AppException("Invalid email or password.", 401);
+
+        await EnsureUserIsActiveAsync(user, cancellationToken);
 
         if (!await _userManager.CheckPasswordAsync(user, password))
         {
@@ -95,6 +98,8 @@ public class IdentityService : IIdentityService
         var user = await _userManager.Users.FirstOrDefaultAsync(x => x.Id == storedRefreshToken.UserId, cancellationToken)
             ?? throw new AppException("User no longer exists.", 404);
 
+        await EnsureUserIsActiveAsync(user, cancellationToken);
+
         var authResult = await BuildAuthResultAsync(user, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return authResult;
@@ -116,8 +121,61 @@ public class IdentityService : IIdentityService
         await _userManager.AddToRoleAsync(user, role);
     }
 
+    public async Task<PasswordSetupResult> GeneratePasswordSetupAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.Users.FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
+            ?? throw new AppException("User not found.", 404);
+
+        user.MustChangePassword = true;
+        await _userManager.UpdateAsync(user);
+
+        var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+        var encodedToken = Uri.EscapeDataString(resetToken);
+        var resetLink = $"https://hrms.local/reset-password?userId={user.Id}&token={encodedToken}";
+
+        return new PasswordSetupResult(resetToken, resetLink);
+    }
+
+    public async Task DeactivateUserAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.Users.FirstOrDefaultAsync(x => x.Id == userId, cancellationToken)
+            ?? throw new AppException("User not found.", 404);
+
+        user.IsActive = false;
+        user.DeactivatedUtc = DateTime.UtcNow;
+        user.LockoutEnabled = true;
+        user.LockoutEnd = DateTimeOffset.MaxValue;
+
+        var updateResult = await _userManager.UpdateAsync(user);
+        if (!updateResult.Succeeded)
+        {
+            throw new AppException(string.Join("; ", updateResult.Errors.Select(x => x.Description)));
+        }
+
+        await _refreshTokenRepository.RevokeActiveTokensAsync(userId, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> IsUserActiveAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await _userManager.Users.FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
+        if (user is null || !user.IsActive)
+        {
+            return false;
+        }
+
+        var employeeIsActive = await _context.Employees
+            .Where(x => x.UserId == userId)
+            .Select(x => (bool?)x.IsActive)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return employeeIsActive is not false;
+    }
+
     private async Task<AuthResult> BuildAuthResultAsync(ApplicationUser user, CancellationToken cancellationToken)
     {
+        await EnsureUserIsActiveAsync(user, cancellationToken);
+
         var roles = await _userManager.GetRolesAsync(user);
         var employeeId = await _context.Employees
             .Where(x => x.UserId == user.Id)
@@ -142,6 +200,22 @@ public class IdentityService : IIdentityService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return new AuthResult(accessToken, refreshTokenValue, expiresUtc, user.Id, user.Email ?? string.Empty, roles.ToArray(), employeeId);
+    }
+
+    private async Task EnsureUserIsActiveAsync(ApplicationUser user, CancellationToken cancellationToken)
+    {
+        if (!user.IsActive)
+        {
+            throw new AppException("Your account has been deactivated.", 403);
+        }
+
+        var employeeIsInactive = await _context.Employees
+            .AnyAsync(x => x.UserId == user.Id && !x.IsActive, cancellationToken);
+
+        if (employeeIsInactive)
+        {
+            throw new AppException("Your employee profile is inactive.", 403);
+        }
     }
 
     private async Task EnsureRoleAsync(string role)

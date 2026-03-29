@@ -91,6 +91,8 @@ public class ReviewLeaveCommandHandler : IRequestHandler<ReviewLeaveCommand, Lea
     private readonly ILeaveRequestRepository _leaveRequestRepository;
     private readonly IEmployeeRepository _employeeRepository;
     private readonly ICurrentUserService _currentUserService;
+    private readonly INotificationService _notificationService;
+    private readonly IAuditTrailService _auditTrailService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
 
@@ -98,12 +100,16 @@ public class ReviewLeaveCommandHandler : IRequestHandler<ReviewLeaveCommand, Lea
         ILeaveRequestRepository leaveRequestRepository,
         IEmployeeRepository employeeRepository,
         ICurrentUserService currentUserService,
+        INotificationService notificationService,
+        IAuditTrailService auditTrailService,
         IUnitOfWork unitOfWork,
         IMapper mapper)
     {
         _leaveRequestRepository = leaveRequestRepository;
         _employeeRepository = employeeRepository;
         _currentUserService = currentUserService;
+        _notificationService = notificationService;
+        _auditTrailService = auditTrailService;
         _unitOfWork = unitOfWork;
         _mapper = mapper;
     }
@@ -126,6 +132,7 @@ public class ReviewLeaveCommandHandler : IRequestHandler<ReviewLeaveCommand, Lea
         var employee = await _employeeRepository.GetByIdAsync(leaveRequest.EmployeeId, cancellationToken)
             ?? throw new AppException("Employee profile not found.", 404);
 
+        var previousStatus = leaveRequest.Status;
         leaveRequest.Status = request.Approve ? LeaveStatus.Approved : LeaveStatus.Rejected;
         leaveRequest.ReviewRemarks = request.Remarks?.Trim();
         leaveRequest.ReviewedByUserId = _currentUserService.UserId.Value;
@@ -140,6 +147,25 @@ public class ReviewLeaveCommandHandler : IRequestHandler<ReviewLeaveCommand, Lea
         }
 
         _leaveRequestRepository.Update(leaveRequest);
+        await _notificationService.CreateAsync(
+            employee.UserId,
+            _currentUserService.UserId,
+            NotificationType.Leave,
+            request.Approve ? "Leave Approved" : "Leave Rejected",
+            $"Your leave request for {leaveRequest.StartDate:yyyy-MM-dd} to {leaveRequest.EndDate:yyyy-MM-dd} is now {leaveRequest.Status}.",
+            nameof(LeaveRequest),
+            leaveRequest.Id,
+            cancellationToken);
+        await _auditTrailService.WriteAsync(
+            _currentUserService.UserId,
+            nameof(LeaveRequest),
+            leaveRequest.Id,
+            "StateChanged",
+            previousStatus.ToString(),
+            leaveRequest.Status.ToString(),
+            request.Remarks?.Trim(),
+            null,
+            cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return _mapper.Map<LeaveRequestDto>(leaveRequest);

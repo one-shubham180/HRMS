@@ -44,8 +44,8 @@ export function AttendancePage() {
     const isManagerView = roles.includes("Admin") || roles.includes("HR");
     const canMarkAttendance = Boolean(employeeId);
     const pageSubtitle = isManagerView
-        ? "Review attendance activity, control geo-tagged photo proof, and mark your own attendance when you have an employee profile."
-        : "Mark attendance with notes, capture proof when required, and review your latest attendance activity.";
+        ? "Review attendance activity, roster-linked overtime, control geo-tagged photo proof, and mark your own attendance when you have an employee profile."
+        : "Mark attendance with notes, capture proof when required, and review your shift-linked attendance and overtime activity.";
 
     const [logs, setLogs] = useState<PagedResult<AttendanceRecord> | null>(null);
     const [settings, setSettings] = useState<AttendanceSettings | null>(null);
@@ -548,17 +548,45 @@ export function AttendancePage() {
                                                     ? `- Out: ${formatDateTime(record.checkOutUtc)}`
                                                     : ""}
                                             </p>
+                                            {record.scheduledShiftName ? (
+                                                <p className="mt-1 text-sm text-slate-600">
+                                                    Shift: {record.scheduledShiftName}
+                                                    {record.scheduledStartTimeLocal && record.scheduledEndTimeLocal
+                                                        ? ` (${record.scheduledStartTimeLocal} - ${record.scheduledEndTimeLocal})`
+                                                        : ""}
+                                                </p>
+                                            ) : null}
                                             {record.notes ? (
                                                 <p className="mt-2 text-sm text-slate-600">{record.notes}</p>
                                             ) : null}
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <span className="badge bg-amber-50 text-amber-700">{record.status}</span>
+                                            {record.isHoliday ? (
+                                                <span className="badge bg-rose-50 text-rose-700">{record.holidayName ?? "Holiday"}</span>
+                                            ) : null}
+                                            {record.isRestDay ? (
+                                                <span className="badge bg-slate-200 text-slate-700">Rest Day</span>
+                                            ) : null}
+                                            {record.overtimeHours > 0 ? (
+                                                <span className="badge bg-emerald-50 text-emerald-700">OT {record.overtimeHours} hrs</span>
+                                            ) : null}
                                             <span className="text-sm font-semibold text-ink">
                                                 {record.workedHours} hrs
                                             </span>
                                         </div>
                                     </div>
+
+                                    {(record.scheduledHours > 0 || record.overtimeHours > 0) ? (
+                                        <div className="mt-4 grid gap-3 md:grid-cols-2">
+                                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                                                Scheduled hours: <span className="font-semibold text-ink">{record.scheduledHours}</span>
+                                            </div>
+                                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                                                Overtime hours: <span className="font-semibold text-ink">{record.overtimeHours}</span>
+                                            </div>
+                                        </div>
+                                    ) : null}
 
                                     {record.checkInPhotoUrl || record.checkOutPhotoUrl ? (
                                         <div className="mt-4 grid gap-4 lg:grid-cols-2">

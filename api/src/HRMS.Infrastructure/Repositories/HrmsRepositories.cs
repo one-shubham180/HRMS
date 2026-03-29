@@ -23,12 +23,14 @@ public class EmployeeRepository : IEmployeeRepository
     public Task<Employee?> GetByIdAsync(Guid employeeId, CancellationToken cancellationToken) =>
         _context.Employees
             .Include(x => x.Department)
+            .Include(x => x.HolidayCalendar)
             .Include(x => x.SalaryStructure)
             .FirstOrDefaultAsync(x => x.Id == employeeId, cancellationToken);
 
     public Task<Employee?> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken) =>
         _context.Employees
             .Include(x => x.Department)
+            .Include(x => x.HolidayCalendar)
             .Include(x => x.SalaryStructure)
             .FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
 
@@ -37,6 +39,7 @@ public class EmployeeRepository : IEmployeeRepository
         var query = _context.Employees
             .AsNoTracking()
             .Include(x => x.Department)
+            .Include(x => x.HolidayCalendar)
             .Include(x => x.SalaryStructure)
             .AsQueryable();
 
@@ -85,6 +88,7 @@ public class EmployeeRepository : IEmployeeRepository
         var query = _context.Employees
             .AsNoTracking()
             .Include(x => x.Department)
+            .Include(x => x.HolidayCalendar)
             .Include(x => x.SalaryStructure)
             .Where(x => x.IsActive)
             .AsQueryable();
@@ -109,6 +113,105 @@ public class EmployeeRepository : IEmployeeRepository
     public void Update(Employee employee) => _context.Employees.Update(employee);
 
     public void Remove(Employee employee) => _context.Employees.Remove(employee);
+}
+
+public class HolidayCalendarRepository : IHolidayCalendarRepository
+{
+    private readonly HrmsDbContext _context;
+
+    public HolidayCalendarRepository(HrmsDbContext context)
+    {
+        _context = context;
+    }
+
+    public Task AddAsync(HolidayCalendar holidayCalendar, CancellationToken cancellationToken) =>
+        _context.HolidayCalendars.AddAsync(holidayCalendar, cancellationToken).AsTask();
+
+    public Task<HolidayCalendar?> GetByIdAsync(Guid holidayCalendarId, CancellationToken cancellationToken) =>
+        _context.HolidayCalendars
+            .Include(x => x.Holidays)
+            .FirstOrDefaultAsync(x => x.Id == holidayCalendarId, cancellationToken);
+
+    public Task<HolidayCalendar?> GetDefaultAsync(CancellationToken cancellationToken) =>
+        _context.HolidayCalendars
+            .Include(x => x.Holidays)
+            .OrderByDescending(x => x.IsDefault)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyCollection<HolidayCalendar>> GetAllAsync(CancellationToken cancellationToken) =>
+        await _context.HolidayCalendars
+            .AsNoTracking()
+            .Include(x => x.Holidays.OrderBy(h => h.Date))
+            .OrderByDescending(x => x.IsDefault)
+            .ThenBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+
+    public void Update(HolidayCalendar holidayCalendar) => _context.HolidayCalendars.Update(holidayCalendar);
+}
+
+public class ShiftDefinitionRepository : IShiftDefinitionRepository
+{
+    private readonly HrmsDbContext _context;
+
+    public ShiftDefinitionRepository(HrmsDbContext context)
+    {
+        _context = context;
+    }
+
+    public Task AddAsync(ShiftDefinition shiftDefinition, CancellationToken cancellationToken) =>
+        _context.ShiftDefinitions.AddAsync(shiftDefinition, cancellationToken).AsTask();
+
+    public Task<ShiftDefinition?> GetByIdAsync(Guid shiftDefinitionId, CancellationToken cancellationToken) =>
+        _context.ShiftDefinitions.FirstOrDefaultAsync(x => x.Id == shiftDefinitionId, cancellationToken);
+
+    public async Task<IReadOnlyCollection<ShiftDefinition>> GetAllAsync(CancellationToken cancellationToken) =>
+        await _context.ShiftDefinitions.AsNoTracking().OrderBy(x => x.Name).ToListAsync(cancellationToken);
+}
+
+public class RosterAssignmentRepository : IRosterAssignmentRepository
+{
+    private readonly HrmsDbContext _context;
+
+    public RosterAssignmentRepository(HrmsDbContext context)
+    {
+        _context = context;
+    }
+
+    public Task AddAsync(RosterAssignment rosterAssignment, CancellationToken cancellationToken) =>
+        _context.RosterAssignments.AddAsync(rosterAssignment, cancellationToken).AsTask();
+
+    public Task<RosterAssignment?> GetByEmployeeAndDateAsync(Guid employeeId, DateOnly workDate, CancellationToken cancellationToken) =>
+        _context.RosterAssignments
+            .Include(x => x.Employee)
+            .Include(x => x.ShiftDefinition)
+            .FirstOrDefaultAsync(x => x.EmployeeId == employeeId && x.WorkDate == workDate, cancellationToken);
+
+    public async Task<IReadOnlyCollection<RosterAssignment>> GetFilteredAsync(Guid? employeeId, DateOnly? workDate, CancellationToken cancellationToken)
+    {
+        var query = _context.RosterAssignments
+            .AsNoTracking()
+            .Include(x => x.Employee)
+            .Include(x => x.ShiftDefinition)
+            .AsQueryable();
+
+        if (employeeId.HasValue)
+        {
+            query = query.Where(x => x.EmployeeId == employeeId.Value);
+        }
+
+        if (workDate.HasValue)
+        {
+            query = query.Where(x => x.WorkDate == workDate.Value);
+        }
+
+        return await query
+            .OrderByDescending(x => x.WorkDate)
+            .ThenBy(x => x.Employee!.FirstName)
+            .Take(100)
+            .ToListAsync(cancellationToken);
+    }
+
+    public void Update(RosterAssignment rosterAssignment) => _context.RosterAssignments.Update(rosterAssignment);
 }
 
 public class DepartmentRepository : IDepartmentRepository
@@ -150,9 +253,9 @@ public class AttendanceRepository : IAttendanceRepository
         _context.AttendanceRecords.AddAsync(attendanceRecord, cancellationToken).AsTask();
 
     public Task<AttendanceRecord?> GetOpenAttendanceAsync(Guid employeeId, DateOnly workDate, CancellationToken cancellationToken) =>
-        _context.AttendanceRecords.FirstOrDefaultAsync(
-            x => x.EmployeeId == employeeId && x.WorkDate == workDate && x.CheckOutUtc == null,
-            cancellationToken);
+        _context.AttendanceRecords
+            .Include(x => x.RosterAssignment)
+            .FirstOrDefaultAsync(x => x.EmployeeId == employeeId && x.WorkDate == workDate && x.CheckOutUtc == null, cancellationToken);
 
     public Task<bool> ExistsForDateAsync(Guid employeeId, DateOnly workDate, CancellationToken cancellationToken) =>
         _context.AttendanceRecords.AnyAsync(x => x.EmployeeId == employeeId && x.WorkDate == workDate, cancellationToken);
@@ -162,6 +265,7 @@ public class AttendanceRepository : IAttendanceRepository
         var query = _context.AttendanceRecords
             .AsNoTracking()
             .Include(x => x.Employee)
+            .Include(x => x.RosterAssignment)
             .AsQueryable();
 
         if (filter.EmployeeId.HasValue)
@@ -356,6 +460,7 @@ public class PayrollRepository : IPayrollRepository
     public Task<PayrollRecord?> GetByEmployeeAndPeriodAsync(Guid employeeId, int year, int month, CancellationToken cancellationToken) =>
         _context.PayrollRecords
             .Include(x => x.Employee)
+            .Include(x => x.Documents)
             .FirstOrDefaultAsync(x => x.EmployeeId == employeeId && x.Year == year && x.Month == month, cancellationToken);
 
     public async Task<PagedResult<PayrollRecord>> GetPagedAsync(PayrollListFilter filter, CancellationToken cancellationToken)
@@ -363,6 +468,7 @@ public class PayrollRepository : IPayrollRepository
         var query = _context.PayrollRecords
             .AsNoTracking()
             .Include(x => x.Employee)
+            .Include(x => x.Documents)
             .AsQueryable();
 
         if (filter.EmployeeId.HasValue)
@@ -407,6 +513,7 @@ public class PayrollRepository : IPayrollRepository
         var query = _context.PayrollRecords
             .AsNoTracking()
             .Include(x => x.Employee)
+            .Include(x => x.Documents)
             .AsQueryable();
 
         if (filter.EmployeeId.HasValue)
@@ -440,6 +547,134 @@ public class PayrollRepository : IPayrollRepository
     public void Update(PayrollRecord payrollRecord) => _context.PayrollRecords.Update(payrollRecord);
 }
 
+public class NotificationRepository : INotificationRepository
+{
+    private readonly HrmsDbContext _context;
+
+    public NotificationRepository(HrmsDbContext context)
+    {
+        _context = context;
+    }
+
+    public Task AddAsync(NotificationItem notification, CancellationToken cancellationToken) =>
+        _context.NotificationItems.AddAsync(notification, cancellationToken).AsTask();
+
+    public Task<NotificationItem?> GetByIdAsync(Guid notificationId, CancellationToken cancellationToken) =>
+        _context.NotificationItems.FirstOrDefaultAsync(x => x.Id == notificationId, cancellationToken);
+
+    public async Task<IReadOnlyCollection<NotificationItem>> GetByRecipientAsync(Guid recipientUserId, CancellationToken cancellationToken) =>
+        await _context.NotificationItems
+            .AsNoTracking()
+            .Where(x => x.RecipientUserId == recipientUserId)
+            .OrderByDescending(x => x.CreatedUtc)
+            .ToListAsync(cancellationToken);
+
+    public void Update(NotificationItem notification) => _context.NotificationItems.Update(notification);
+}
+
+public class AuditTrailRepository : IAuditTrailRepository
+{
+    private readonly HrmsDbContext _context;
+
+    public AuditTrailRepository(HrmsDbContext context)
+    {
+        _context = context;
+    }
+
+    public Task AddAsync(AuditTrailEntry auditTrailEntry, CancellationToken cancellationToken) =>
+        _context.AuditTrailEntries.AddAsync(auditTrailEntry, cancellationToken).AsTask();
+
+    public async Task<IReadOnlyCollection<AuditTrailEntry>> GetRecentAsync(int take, CancellationToken cancellationToken) =>
+        await _context.AuditTrailEntries
+            .AsNoTracking()
+            .OrderByDescending(x => x.OccurredUtc)
+            .Take(take)
+            .ToListAsync(cancellationToken);
+}
+
+public class EmployeeDocumentRepository : IEmployeeDocumentRepository
+{
+    private readonly HrmsDbContext _context;
+
+    public EmployeeDocumentRepository(HrmsDbContext context)
+    {
+        _context = context;
+    }
+
+    public Task AddAsync(EmployeeDocument document, CancellationToken cancellationToken) =>
+        _context.EmployeeDocuments.AddAsync(document, cancellationToken).AsTask();
+
+    public async Task<IReadOnlyCollection<EmployeeDocument>> GetByEmployeeAsync(Guid employeeId, CancellationToken cancellationToken) =>
+        await _context.EmployeeDocuments
+            .AsNoTracking()
+            .Where(x => x.EmployeeId == employeeId)
+            .OrderByDescending(x => x.CreatedUtc)
+            .ToListAsync(cancellationToken);
+}
+
+public class CandidateRepository : ICandidateRepository
+{
+    private readonly HrmsDbContext _context;
+
+    public CandidateRepository(HrmsDbContext context)
+    {
+        _context = context;
+    }
+
+    public Task AddAsync(Candidate candidate, CancellationToken cancellationToken) =>
+        _context.Candidates.AddAsync(candidate, cancellationToken).AsTask();
+
+    public Task<Candidate?> GetByIdAsync(Guid candidateId, CancellationToken cancellationToken) =>
+        _context.Candidates
+            .Include(x => x.Department)
+            .Include(x => x.ConvertedEmployee)
+            .FirstOrDefaultAsync(x => x.Id == candidateId, cancellationToken);
+
+    public Task<Candidate?> GetByEmailAsync(string email, CancellationToken cancellationToken) =>
+        _context.Candidates
+            .Include(x => x.Department)
+            .Include(x => x.ConvertedEmployee)
+            .FirstOrDefaultAsync(x => x.Email == email.Trim().ToLower(), cancellationToken);
+
+    public async Task<IReadOnlyCollection<Candidate>> GetAllAsync(CancellationToken cancellationToken) =>
+        await _context.Candidates
+            .AsNoTracking()
+            .Include(x => x.Department)
+            .Include(x => x.ConvertedEmployee)
+            .OrderByDescending(x => x.CreatedUtc)
+            .ToListAsync(cancellationToken);
+
+    public void Update(Candidate candidate) => _context.Candidates.Update(candidate);
+}
+
+public class PerformanceAppraisalRepository : IPerformanceAppraisalRepository
+{
+    private readonly HrmsDbContext _context;
+
+    public PerformanceAppraisalRepository(HrmsDbContext context)
+    {
+        _context = context;
+    }
+
+    public Task AddAsync(PerformanceAppraisal appraisal, CancellationToken cancellationToken) =>
+        _context.PerformanceAppraisals.AddAsync(appraisal, cancellationToken).AsTask();
+
+    public async Task<IReadOnlyCollection<PerformanceAppraisal>> GetAllAsync(CancellationToken cancellationToken) =>
+        await _context.PerformanceAppraisals
+            .AsNoTracking()
+            .Include(x => x.Employee)
+            .OrderByDescending(x => x.StartDate)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyCollection<PerformanceAppraisal>> GetByEmployeeAsync(Guid employeeId, CancellationToken cancellationToken) =>
+        await _context.PerformanceAppraisals
+            .AsNoTracking()
+            .Include(x => x.Employee)
+            .Where(x => x.EmployeeId == employeeId)
+            .OrderByDescending(x => x.StartDate)
+            .ToListAsync(cancellationToken);
+}
+
 public class RefreshTokenRepository : IRefreshTokenRepository
 {
     private readonly HrmsDbContext _context;
@@ -454,6 +689,19 @@ public class RefreshTokenRepository : IRefreshTokenRepository
 
     public Task<RefreshToken?> GetByTokenAsync(string token, CancellationToken cancellationToken) =>
         _context.RefreshTokens.FirstOrDefaultAsync(x => x.Token == token, cancellationToken);
+
+    public async Task RevokeActiveTokensAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var refreshTokens = await _context.RefreshTokens
+            .Where(x => x.UserId == userId && !x.IsRevoked)
+            .ToListAsync(cancellationToken);
+
+        foreach (var refreshToken in refreshTokens)
+        {
+            refreshToken.IsRevoked = true;
+            refreshToken.RevokedUtc = DateTime.UtcNow;
+        }
+    }
 
     public void Update(RefreshToken refreshToken) => _context.RefreshTokens.Update(refreshToken);
 }

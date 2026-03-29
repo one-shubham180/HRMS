@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { apiClient } from "../api/client";
 import { AnimatedPage } from "../components/AnimatedPage";
 import { PageHeader } from "../components/PageHeader";
+import { SelectField } from "../components/SelectField";
 import type { Department, Employee, EmploymentType, PagedResult, Role } from "../types/hrms";
 
 const initialForm = {
@@ -133,23 +134,37 @@ export function EmployeesPage() {
             <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Temporary password" title="Temporary password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} />
             <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Employee code" title="Employee code" value={form.employeeCode} onChange={(event) => setForm((current) => ({ ...current, employeeCode: event.target.value }))} />
             <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Job title" title="Job title" value={form.jobTitle} onChange={(event) => setForm((current) => ({ ...current, jobTitle: event.target.value }))} />
-            <select className="input transition-all duration-300 focus:-translate-y-0.5" title="Department" value={form.departmentId} onChange={(event) => setForm((current) => ({ ...current, departmentId: event.target.value }))}>
-              <option value="" disabled>Select Department</option>
-              {departments.map((department) => (
-                <option key={department.id} value={department.id}>{department.name}</option>
-              ))}
-            </select>
-            <select className="input transition-all duration-300 focus:-translate-y-0.5" title="System Role" value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value as Role }))}>
-              <option value="Employee">Employee</option>
-              <option value="HR">HR</option>
-              <option value="Admin">Admin</option>
-            </select>
-            <select className="input transition-all duration-300 focus:-translate-y-0.5" title="Employment Type" value={form.employmentType} onChange={(event) => setForm((current) => ({ ...current, employmentType: event.target.value as EmploymentType }))}>
-              <option value="FullTime">Full time</option>
-              <option value="PartTime">Part time</option>
-              <option value="Contract">Contract</option>
-              <option value="Intern">Intern</option>
-            </select>
+            <SelectField
+              className="transition-all duration-300 focus-within:-translate-y-0.5"
+              value={form.departmentId}
+              options={[
+                { value: "", label: "Select Department", disabled: true },
+                ...departments.map((department) => ({ value: department.id, label: department.name })),
+              ]}
+              onChange={(value) => setForm((current) => ({ ...current, departmentId: value }))}
+              placeholder="Select Department"
+            />
+            <SelectField
+              className="transition-all duration-300 focus-within:-translate-y-0.5"
+              value={form.role}
+              options={[
+                { value: "Employee", label: "Employee" },
+                { value: "HR", label: "HR" },
+                { value: "Admin", label: "Admin" },
+              ]}
+              onChange={(value) => setForm((current) => ({ ...current, role: value as Role }))}
+            />
+            <SelectField
+              className="transition-all duration-300 focus-within:-translate-y-0.5"
+              value={form.employmentType}
+              options={[
+                { value: "FullTime", label: "Full time" },
+                { value: "PartTime", label: "Part time" },
+                { value: "Contract", label: "Contract" },
+                { value: "Intern", label: "Intern" },
+              ]}
+              onChange={(value) => setForm((current) => ({ ...current, employmentType: value as EmploymentType }))}
+            />
             <input className="input transition-all duration-300 focus:-translate-y-0.5" placeholder="Phone number" title="Phone number" value={form.phoneNumber} onChange={(event) => setForm((current) => ({ ...current, phoneNumber: event.target.value }))} />
           </div>
 

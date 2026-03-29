@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 import { AnimatedPage } from "../components/AnimatedPage";
 import { PageHeader } from "../components/PageHeader";
+import { SelectField } from "../components/SelectField";
 import { useAuthStore } from "../features/auth/authStore";
 import type { LeaveRequest, LeaveStatus, LeaveType, PagedResult } from "../types/hrms";
 
@@ -75,12 +76,16 @@ export function LeavePage() {
           <form className="panel space-y-4 p-6" onSubmit={onApply}>
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-ember">Apply Leave</p>
             <h2 className="font-display text-2xl text-ink">Submit a request</h2>
-            <select className="input" value={form.leaveType} onChange={(event) => setForm((current) => ({ ...current, leaveType: event.target.value as LeaveType }))}>
-              <option value="Annual">Annual leave</option>
-              <option value="Sick">Sick leave</option>
-              <option value="Casual">Casual leave</option>
-              <option value="Unpaid">Unpaid leave</option>
-            </select>
+            <SelectField
+              value={form.leaveType}
+              options={[
+                { value: "Annual", label: "Annual leave" },
+                { value: "Sick", label: "Sick leave" },
+                { value: "Casual", label: "Casual leave" },
+                { value: "Unpaid", label: "Unpaid leave" },
+              ]}
+              onChange={(value) => setForm((current) => ({ ...current, leaveType: value as LeaveType }))}
+            />
             <div className="grid gap-4 md:grid-cols-2">
               <input className="input" type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} />
               <input className="input" type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} />

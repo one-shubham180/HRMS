@@ -43,6 +43,7 @@ public class MappingProfile : Profile
                 source.Id,
                 source.EmployeeId,
                 source.Employee != null ? source.Employee.FullName : string.Empty,
+                source.RosterAssignmentId,
                 source.WorkDate,
                 source.CheckInUtc,
                 source.CheckInCapturedPhotoUtc,
@@ -58,6 +59,54 @@ public class MappingProfile : Profile
                 source.CheckOutLocationLabel,
                 source.Status,
                 source.WorkedHours,
+                source.ScheduledShiftName,
+                source.ScheduledStartTimeLocal,
+                source.ScheduledEndTimeLocal,
+                source.ScheduledHours,
+                source.OvertimeHours,
+                source.IsHoliday,
+                source.HolidayName,
+                source.IsRestDay,
+                source.Notes));
+
+        CreateMap<ShiftDefinition, ShiftDefinitionDto>()
+            .ConstructUsing(source => new ShiftDefinitionDto(
+                source.Id,
+                source.Name,
+                source.Code,
+                source.StartTimeLocal,
+                source.EndTimeLocal,
+                source.StandardHours,
+                source.BreakMinutes,
+                source.MinimumOvertimeMinutes));
+
+        CreateMap<HolidayDate, HolidayDateDto>()
+            .ConstructUsing(source => new HolidayDateDto(
+                source.Id,
+                source.Date,
+                source.Name,
+                source.IsOptional));
+
+        CreateMap<HolidayCalendar, HolidayCalendarDto>()
+            .ConstructUsing(source => new HolidayCalendarDto(
+                source.Id,
+                source.Name,
+                source.Code,
+                source.IsDefault,
+                source.Holidays
+                    .OrderBy(x => x.Date)
+                    .Select(x => new HolidayDateDto(x.Id, x.Date, x.Name, x.IsOptional))
+                    .ToArray()));
+
+        CreateMap<RosterAssignment, RosterAssignmentDto>()
+            .ConstructUsing(source => new RosterAssignmentDto(
+                source.Id,
+                source.EmployeeId,
+                source.Employee != null ? source.Employee.FullName : string.Empty,
+                source.ShiftDefinitionId,
+                source.ShiftDefinition != null ? source.ShiftDefinition.Name : string.Empty,
+                source.WorkDate,
+                source.IsRestDay,
                 source.Notes));
 
         CreateMap<LeaveRequest, LeaveRequestDto>()
@@ -101,5 +150,74 @@ public class MappingProfile : Profile
                 source.NetSalary,
                 source.PayslipNumber,
                 source.GeneratedUtc));
+
+        CreateMap<NotificationItem, NotificationDto>()
+            .ConstructUsing(source => new NotificationDto(
+                source.Id,
+                source.RecipientUserId,
+                source.TriggeredByUserId,
+                source.Type,
+                source.Status,
+                source.Title,
+                source.Message,
+                source.RelatedEntityType,
+                source.RelatedEntityId,
+                source.DeliveredUtc,
+                source.ReadUtc));
+
+        CreateMap<AuditTrailEntry, AuditTrailDto>()
+            .ConstructUsing(source => new AuditTrailDto(
+                source.Id,
+                source.ActorUserId,
+                source.NotificationItemId,
+                source.EntityType,
+                source.EntityId,
+                source.Action,
+                source.OldState,
+                source.NewState,
+                source.Metadata,
+                source.OccurredUtc));
+
+        CreateMap<EmployeeDocument, EmployeeDocumentDto>()
+            .ConstructUsing(source => new EmployeeDocumentDto(
+                source.Id,
+                source.EmployeeId,
+                source.PayrollRecordId,
+                source.Category,
+                source.FileName,
+                source.StoragePath,
+                source.ContentType,
+                source.FileSize,
+                source.IsSystemGenerated,
+                source.UploadedByUserId,
+                source.CreatedUtc));
+
+        CreateMap<Candidate, CandidateDto>()
+            .ConstructUsing(source => new CandidateDto(
+                source.Id,
+                source.DepartmentId,
+                source.Department != null ? source.Department.Name : string.Empty,
+                source.ConvertedEmployeeId,
+                source.FirstName,
+                source.LastName,
+                source.FullName,
+                source.Email,
+                source.PhoneNumber,
+                source.JobTitle,
+                source.Status,
+                source.HiredDate,
+                source.Notes));
+
+        CreateMap<PerformanceAppraisal, PerformanceAppraisalDto>()
+            .ConstructUsing(source => new PerformanceAppraisalDto(
+                source.Id,
+                source.EmployeeId,
+                source.Employee != null ? source.Employee.FullName : string.Empty,
+                source.InitializedFromCandidateId,
+                source.CycleName,
+                source.StartDate,
+                source.EndDate,
+                source.Status,
+                source.GoalsSummary));
     }
 }

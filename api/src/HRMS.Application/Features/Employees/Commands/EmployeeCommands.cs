@@ -72,6 +72,9 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
     private readonly IIdentityService _identityService;
     private readonly IDepartmentRepository _departmentRepository;
     private readonly IEmployeeRepository _employeeRepository;
+    private readonly ICurrentUserService _currentUserService;
+    private readonly IOnboardingService _onboardingService;
+    private readonly IAuditTrailService _auditTrailService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IMapper _mapper;
 
@@ -79,12 +82,18 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
         IIdentityService identityService,
         IDepartmentRepository departmentRepository,
         IEmployeeRepository employeeRepository,
+        ICurrentUserService currentUserService,
+        IOnboardingService onboardingService,
+        IAuditTrailService auditTrailService,
         IUnitOfWork unitOfWork,
         IMapper mapper)
     {
         _identityService = identityService;
         _departmentRepository = departmentRepository;
         _employeeRepository = employeeRepository;
+        _currentUserService = currentUserService;
+        _onboardingService = onboardingService;
+        _auditTrailService = auditTrailService;
         _unitOfWork = unitOfWork;
         _mapper = mapper;
     }
@@ -129,6 +138,18 @@ public class CreateEmployeeCommandHandler : IRequestHandler<CreateEmployeeComman
         };
 
         await _employeeRepository.AddAsync(employee, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _onboardingService.SendWelcomeEmailAsync(employee, cancellationToken);
+        await _auditTrailService.WriteAsync(
+            _currentUserService.UserId,
+            nameof(Employee),
+            employee.Id,
+            "EmployeeCreated",
+            null,
+            "Active",
+            employee.WorkEmail,
+            null,
+            cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return _mapper.Map<EmployeeDto>(employee);
@@ -184,11 +205,22 @@ public class UpdateEmployeeCommandHandler : IRequestHandler<UpdateEmployeeComman
 public class DeleteEmployeeCommandHandler : IRequestHandler<DeleteEmployeeCommand>
 {
     private readonly IEmployeeRepository _employeeRepository;
+    private readonly IIdentityService _identityService;
+    private readonly ICurrentUserService _currentUserService;
+    private readonly IAuditTrailService _auditTrailService;
     private readonly IUnitOfWork _unitOfWork;
 
-    public DeleteEmployeeCommandHandler(IEmployeeRepository employeeRepository, IUnitOfWork unitOfWork)
+    public DeleteEmployeeCommandHandler(
+        IEmployeeRepository employeeRepository,
+        IIdentityService identityService,
+        ICurrentUserService currentUserService,
+        IAuditTrailService auditTrailService,
+        IUnitOfWork unitOfWork)
     {
         _employeeRepository = employeeRepository;
+        _identityService = identityService;
+        _currentUserService = currentUserService;
+        _auditTrailService = auditTrailService;
         _unitOfWork = unitOfWork;
     }
 
@@ -198,8 +230,21 @@ public class DeleteEmployeeCommandHandler : IRequestHandler<DeleteEmployeeComman
             ?? throw new AppException("Employee not found.", (int)HttpStatusCode.NotFound);
 
         employee.IsActive = false;
+        employee.DeactivatedUtc = DateTime.UtcNow;
+        employee.DeactivatedByUserId = _currentUserService.UserId;
         employee.ModifiedUtc = DateTime.UtcNow;
         _employeeRepository.Update(employee);
+        await _identityService.DeactivateUserAsync(employee.UserId, cancellationToken);
+        await _auditTrailService.WriteAsync(
+            _currentUserService.UserId,
+            nameof(Employee),
+            employee.Id,
+            "EmployeeDeactivated",
+            "Active",
+            "Inactive",
+            employee.WorkEmail,
+            null,
+            cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Unit.Value;
     }

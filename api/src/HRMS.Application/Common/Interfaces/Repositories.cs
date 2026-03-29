@@ -16,6 +16,30 @@ public interface IEmployeeRepository
     void Remove(Employee employee);
 }
 
+public interface IHolidayCalendarRepository
+{
+    Task AddAsync(HolidayCalendar holidayCalendar, CancellationToken cancellationToken);
+    Task<HolidayCalendar?> GetByIdAsync(Guid holidayCalendarId, CancellationToken cancellationToken);
+    Task<HolidayCalendar?> GetDefaultAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<HolidayCalendar>> GetAllAsync(CancellationToken cancellationToken);
+    void Update(HolidayCalendar holidayCalendar);
+}
+
+public interface IShiftDefinitionRepository
+{
+    Task AddAsync(ShiftDefinition shiftDefinition, CancellationToken cancellationToken);
+    Task<ShiftDefinition?> GetByIdAsync(Guid shiftDefinitionId, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<ShiftDefinition>> GetAllAsync(CancellationToken cancellationToken);
+}
+
+public interface IRosterAssignmentRepository
+{
+    Task AddAsync(RosterAssignment rosterAssignment, CancellationToken cancellationToken);
+    Task<RosterAssignment?> GetByEmployeeAndDateAsync(Guid employeeId, DateOnly workDate, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<RosterAssignment>> GetFilteredAsync(Guid? employeeId, DateOnly? workDate, CancellationToken cancellationToken);
+    void Update(RosterAssignment rosterAssignment);
+}
+
 public interface IDepartmentRepository
 {
     Task AddAsync(Department department, CancellationToken cancellationToken);
@@ -69,10 +93,47 @@ public interface IPayrollRepository
     void Update(PayrollRecord payrollRecord);
 }
 
+public interface INotificationRepository
+{
+    Task AddAsync(NotificationItem notification, CancellationToken cancellationToken);
+    Task<NotificationItem?> GetByIdAsync(Guid notificationId, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<NotificationItem>> GetByRecipientAsync(Guid recipientUserId, CancellationToken cancellationToken);
+    void Update(NotificationItem notification);
+}
+
+public interface IAuditTrailRepository
+{
+    Task AddAsync(AuditTrailEntry auditTrailEntry, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<AuditTrailEntry>> GetRecentAsync(int take, CancellationToken cancellationToken);
+}
+
+public interface IEmployeeDocumentRepository
+{
+    Task AddAsync(EmployeeDocument document, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<EmployeeDocument>> GetByEmployeeAsync(Guid employeeId, CancellationToken cancellationToken);
+}
+
+public interface ICandidateRepository
+{
+    Task AddAsync(Candidate candidate, CancellationToken cancellationToken);
+    Task<Candidate?> GetByIdAsync(Guid candidateId, CancellationToken cancellationToken);
+    Task<Candidate?> GetByEmailAsync(string email, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<Candidate>> GetAllAsync(CancellationToken cancellationToken);
+    void Update(Candidate candidate);
+}
+
+public interface IPerformanceAppraisalRepository
+{
+    Task AddAsync(PerformanceAppraisal appraisal, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<PerformanceAppraisal>> GetAllAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<PerformanceAppraisal>> GetByEmployeeAsync(Guid employeeId, CancellationToken cancellationToken);
+}
+
 public interface IRefreshTokenRepository
 {
     Task AddAsync(RefreshToken refreshToken, CancellationToken cancellationToken);
     Task<RefreshToken?> GetByTokenAsync(string token, CancellationToken cancellationToken);
+    Task RevokeActiveTokensAsync(Guid userId, CancellationToken cancellationToken);
     void Update(RefreshToken refreshToken);
 }
 
