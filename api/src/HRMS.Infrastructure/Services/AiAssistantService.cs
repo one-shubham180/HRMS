@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -25,9 +26,9 @@ public sealed class AiAssistantService : IAiAssistantService
         new("workforce", "/workforce", "Workforce", "Manage shift planning, rosters, and workforce scheduling operations.", ["Admin", "HR"], "workforce", "schedule", "shift", "planning"),
         new("attendance", "/attendance", "Attendance", "Handle check-in, check-out, geo-tagged proof, and attendance logs.", [], "attendance", "check in", "check-in", "check out", "check-out", "present"),
         new("my-roster", "/my-roster", "My Roster", "Review the logged-in employee's assigned shifts and upcoming workdays.", ["Employee"], "roster", "my shift", "my schedule"),
-        new("leaves", "/leaves", "Leaves", "Apply for leave or review and approve pending requests.", [], "leave", "vacation", "time off", "approve leave"),
+        new("leaves", "/leaves", "Leaves", "Apply for leave or review pending requests.", [], "leave", "vacation", "time off", "approve leave"),
         new("payroll", "/payroll", "Payroll", "Review salary structures, generate payroll, and inspect payslip history.", [], "payroll", "salary", "payslip", "compensation"),
-        new("documents", "/documents", "Documents", "Open the document vault for uploaded files and generated records.", [], "document", "vault", "file", "contract", "payslip file"),
+        new("documents", "/documents", "Documents", "Open the document vault for uploaded files and generated records.", [], "document", "vault", "file", "contract"),
         new("notifications", "/notifications", "Notifications", "Track alerts tied to leave, payroll, onboarding, recruitment, and general workflows.", [], "notification", "alert", "updates"),
         new("talent", "/talent", "Talent", "Review recruiting and talent pipeline features such as candidates and appraisals.", [], "talent", "recruitment", "candidate", "hiring", "appraisal")
     ];
@@ -67,40 +68,14 @@ HRMS is a human resource management portal with these major capabilities:
     public async Task<AiChatResponseDto> GetResponseAsync(AiChatRequestDto request, CancellationToken cancellationToken)
     {
         var availableRoutes = GetAvailableRoutes();
-        var latestUserMessage = request.Messages.LastOrDefault(message =>
-            string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))?.Content?.Trim() ?? string.Empty;
-
-        if (string.IsNullOrWhiteSpace(_options.Model))
+        var latestUserMessage = GetLatestUserMessage(request);
+        var configurationIssue = GetConfigurationIssue(availableRoutes, latestUserMessage, request.CurrentPath);
+        if (configurationIssue is not null)
         {
-            return BuildUnavailableResponse(
-                "The AI assistant is almost ready, but the NVIDIA model id is missing in the API configuration.",
-                availableRoutes,
-                latestUserMessage);
+            return configurationIssue;
         }
 
-        var apiKey = ResolveApiKey();
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            return BuildUnavailableResponse(
-                "The AI assistant is not configured with an NVIDIA API key yet. Add it on the server to enable live chat.",
-                availableRoutes,
-                latestUserMessage);
-        }
-
-        var payload = new
-        {
-            model = _options.Model,
-            temperature = _options.Temperature,
-            max_tokens = _options.MaxTokens,
-            messages = BuildPromptMessages(request, availableRoutes)
-        };
-
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl.TrimEnd('/')}/chat/completions")
-        {
-            Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json")
-        };
-        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-
+        using var httpRequest = BuildProviderRequest(request, availableRoutes, stream: false);
         using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
         var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
 
@@ -110,19 +85,157 @@ HRMS is a human resource management portal with these major capabilities:
             return BuildUnavailableResponse(
                 BuildProviderErrorMessage(response.StatusCode, rawResponse),
                 availableRoutes,
-                latestUserMessage);
+                latestUserMessage,
+                request.CurrentPath);
         }
 
         var completion = JsonSerializer.Deserialize<NvidiaChatCompletionResponse>(rawResponse, JsonOptions);
-        var assistantOutput = ExtractAssistantContent(completion);
-        var parsedPayload = ParseAssistantPayload(assistantOutput, availableRoutes, latestUserMessage);
+        var assistantMessage = SanitizeMessage(ExtractAssistantContent(completion));
 
-        return new AiChatResponseDto
+        return BuildResponsePayload(assistantMessage, availableRoutes, latestUserMessage, request.CurrentPath);
+    }
+
+    public async IAsyncEnumerable<AiChatStreamEventDto> StreamResponseAsync(
+        AiChatRequestDto request,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var availableRoutes = GetAvailableRoutes();
+        var latestUserMessage = GetLatestUserMessage(request);
+        var configurationIssue = GetConfigurationIssue(availableRoutes, latestUserMessage, request.CurrentPath);
+        if (configurationIssue is not null)
         {
-            Message = parsedPayload.Message,
-            Actions = parsedPayload.Actions,
-            AutoNavigatePath = parsedPayload.AutoNavigatePath
+            yield return new AiChatStreamEventDto
+            {
+                Type = "complete",
+                Message = configurationIssue.Message,
+                Actions = configurationIssue.Actions,
+                AutoNavigatePath = configurationIssue.AutoNavigatePath
+            };
+            yield break;
+        }
+
+        using var httpRequest = BuildProviderRequest(request, availableRoutes, stream: true);
+        using var response = await _httpClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var rawError = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogWarning("AI assistant streaming request failed with status {StatusCode}: {ResponseBody}", response.StatusCode, rawError);
+            var fallback = BuildUnavailableResponse(
+                BuildProviderErrorMessage(response.StatusCode, rawError),
+                availableRoutes,
+                latestUserMessage,
+                request.CurrentPath);
+
+            yield return new AiChatStreamEventDto
+            {
+                Type = "complete",
+                Message = fallback.Message,
+                Actions = fallback.Actions,
+                AutoNavigatePath = fallback.AutoNavigatePath
+            };
+            yield break;
+        }
+
+        var responseBuffer = new StringBuilder();
+        await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(responseStream);
+
+        while (!reader.EndOfStream)
+        {
+            var line = await reader.ReadLineAsync();
+            if (line is null)
+            {
+                break;
+            }
+
+            if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var payload = line["data:".Length..].Trim();
+            if (string.Equals(payload, "[DONE]", StringComparison.OrdinalIgnoreCase))
+            {
+                break;
+            }
+
+            var delta = ExtractAssistantDelta(payload);
+            if (string.IsNullOrEmpty(delta))
+            {
+                continue;
+            }
+
+            responseBuffer.Append(delta);
+            yield return new AiChatStreamEventDto
+            {
+                Type = "delta",
+                Delta = delta
+            };
+        }
+
+        var finalResponse = BuildResponsePayload(
+            SanitizeMessage(responseBuffer.ToString()),
+            availableRoutes,
+            latestUserMessage,
+            request.CurrentPath);
+
+        yield return new AiChatStreamEventDto
+        {
+            Type = "complete",
+            Message = finalResponse.Message,
+            Actions = finalResponse.Actions,
+            AutoNavigatePath = finalResponse.AutoNavigatePath
         };
+    }
+
+    private AiChatResponseDto? GetConfigurationIssue(
+        IReadOnlyCollection<PortalRoute> availableRoutes,
+        string latestUserMessage,
+        string? currentPath)
+    {
+        if (string.IsNullOrWhiteSpace(_options.Model))
+        {
+            return BuildUnavailableResponse(
+                "The AI assistant is almost ready, but the NVIDIA model id is missing in the API configuration.",
+                availableRoutes,
+                latestUserMessage,
+                currentPath);
+        }
+
+        if (string.IsNullOrWhiteSpace(ResolveApiKey()))
+        {
+            return BuildUnavailableResponse(
+                "The AI assistant is not configured with an NVIDIA API key yet. Add it on the server to enable live chat.",
+                availableRoutes,
+                latestUserMessage,
+                currentPath);
+        }
+
+        return null;
+    }
+
+    private HttpRequestMessage BuildProviderRequest(
+        AiChatRequestDto request,
+        IReadOnlyCollection<PortalRoute> availableRoutes,
+        bool stream)
+    {
+        var payload = new
+        {
+            model = _options.Model,
+            temperature = _options.Temperature,
+            max_tokens = _options.MaxTokens,
+            stream,
+            messages = BuildPromptMessages(request, availableRoutes)
+        };
+
+        var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl.TrimEnd('/')}/chat/completions")
+        {
+            Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json")
+        };
+
+        httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ResolveApiKey());
+        return httpRequest;
     }
 
     private string? ResolveApiKey() =>
@@ -142,7 +255,7 @@ HRMS is a human resource management portal with these major capabilities:
 
         foreach (var message in request.Messages
                      .Where(message => !string.IsNullOrWhiteSpace(message.Content))
-                     .TakeLast(8))
+                     .TakeLast(12))
         {
             promptMessages.Add(new
             {
@@ -160,17 +273,17 @@ HRMS is a human resource management portal with these major capabilities:
             ? string.Join(", ", _currentUserService.Roles)
             : "Authenticated User";
         var routeSummary = string.Join(Environment.NewLine, availableRoutes.Select(route =>
-            $"- id: {route.Id}; label: {route.Label}; path: {route.Path}; description: {route.Description}"));
+            $"- {route.Label} ({route.Path}): {route.Description}"));
 
         return $$"""
-You are HRMS Compass, the in-portal assistant for this HRMS application.
-Stay grounded in the product context below and help the user understand features, workflows, and navigation.
-Do not invent pages or permissions that are not listed.
-Prefer concise answers. Keep the assistant message under 140 words when possible.
-Only recommend routes from the available route list.
-Set autoNavigateRouteId only when the user explicitly asks to go, open, navigate, redirect, or take them to a page now.
-Respond with strict JSON only using this exact shape:
-{"message":"string","actionRouteIds":["route-id"],"autoNavigateRouteId":"route-id-or-null"}
+You are HRMS Compass, a warm and practical in-portal assistant for this HRMS product.
+Act like a real conversational copilot, not a JSON API.
+Use prior messages naturally so the conversation feels continuous.
+Stay focused on helping with this portal: features, workflows, permissions, navigation, and what the user can do on the current page.
+Be concise but conversational. Usually answer in 2 to 5 short sentences.
+If a question is unrelated to the HRMS portal, politely say you specialize in this portal and steer the user back to product help.
+Do not invent pages, permissions, data, or workflows that are not listed.
+If navigation would help, mention the exact route label so the UI can suggest it.
 
 Portal context:
 {{PortalKnowledge}}
@@ -188,6 +301,10 @@ Available routes:
     private static string NormalizeRole(string role) =>
         string.Equals(role, "assistant", StringComparison.OrdinalIgnoreCase) ? "assistant" : "user";
 
+    private string GetLatestUserMessage(AiChatRequestDto request) =>
+        request.Messages.LastOrDefault(message =>
+            string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase))?.Content?.Trim() ?? string.Empty;
+
     private IReadOnlyCollection<PortalRoute> GetAvailableRoutes() =>
         PortalRoutes
             .Where(route => route.AllowedRoles.Count == 0 || route.AllowedRoles.Intersect(_currentUserService.Roles, StringComparer.OrdinalIgnoreCase).Any())
@@ -196,15 +313,219 @@ Available routes:
     private AiChatResponseDto BuildUnavailableResponse(
         string message,
         IReadOnlyCollection<PortalRoute> availableRoutes,
-        string latestUserMessage)
+        string latestUserMessage,
+        string? currentPath)
     {
-        var fallback = BuildFallbackPayload(message, availableRoutes, latestUserMessage);
+        var fallback = BuildResponsePayload(message, availableRoutes, latestUserMessage, currentPath);
         return new AiChatResponseDto
         {
             Message = fallback.Message,
             Actions = fallback.Actions,
             AutoNavigatePath = fallback.AutoNavigatePath
         };
+    }
+
+    private AiChatResponseDto BuildResponsePayload(
+        string message,
+        IReadOnlyCollection<PortalRoute> availableRoutes,
+        string latestUserMessage,
+        string? currentPath)
+    {
+        var sanitizedMessage = SanitizeMessage(message);
+        var suggestedRoutes = SuggestRoutes(latestUserMessage, sanitizedMessage, currentPath, availableRoutes);
+        var shouldAutoNavigate = ShouldAutoNavigate(latestUserMessage);
+        var autoRoute = shouldAutoNavigate ? suggestedRoutes.FirstOrDefault() : null;
+
+        return new AiChatResponseDto
+        {
+            Message = sanitizedMessage,
+            Actions = suggestedRoutes
+                .Take(3)
+                .Select(route => new AiAssistantActionDto
+                {
+                    Label = route.Label,
+                    Path = route.Path,
+                    Description = route.Description,
+                    AutoNavigate = string.Equals(route.Path, autoRoute?.Path, StringComparison.OrdinalIgnoreCase)
+                })
+                .ToArray(),
+            AutoNavigatePath = autoRoute?.Path
+        };
+    }
+
+    private IReadOnlyCollection<PortalRoute> SuggestRoutes(
+        string latestUserMessage,
+        string assistantMessage,
+        string? currentPath,
+        IReadOnlyCollection<PortalRoute> availableRoutes)
+    {
+        var scores = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        void AddScore(PortalRoute route, int amount)
+        {
+            scores[route.Id] = scores.TryGetValue(route.Id, out var current) ? current + amount : amount;
+        }
+
+        if (TryGetCurrentRoute(currentPath, availableRoutes) is { } currentRoute)
+        {
+            if (IsCurrentPageQuestion(latestUserMessage))
+            {
+                AddScore(currentRoute, 8);
+            }
+
+            if (string.Equals(currentRoute.Path, "/dashboard", StringComparison.OrdinalIgnoreCase) &&
+                Regex.IsMatch(latestUserMessage, @"\b(start|overview|summary)\b", RegexOptions.IgnoreCase))
+            {
+                AddScore(currentRoute, 4);
+            }
+        }
+
+        var combinedContext = $"{latestUserMessage} {assistantMessage}";
+        foreach (var route in availableRoutes)
+        {
+            var score = GetRouteScore(combinedContext, route);
+            if (score > 0)
+            {
+                AddScore(route, score);
+            }
+        }
+
+        if (Regex.IsMatch(latestUserMessage, @"\b(main|portal|features|modules|help)\b", RegexOptions.IgnoreCase))
+        {
+            foreach (var route in GetDefaultRecommendedRoutes(availableRoutes))
+            {
+                AddScore(route, 3);
+            }
+        }
+
+        return availableRoutes
+            .Where(route => scores.ContainsKey(route.Id))
+            .OrderByDescending(route => scores[route.Id])
+            .ThenBy(route => route.Label)
+            .ToArray();
+    }
+
+    private static bool IsCurrentPageQuestion(string message) =>
+        Regex.IsMatch(message, @"\b(this page|here|current page|what can i do)\b", RegexOptions.IgnoreCase);
+
+    private static PortalRoute? TryGetCurrentRoute(string? currentPath, IReadOnlyCollection<PortalRoute> availableRoutes) =>
+        availableRoutes.FirstOrDefault(route =>
+            string.Equals(route.Path, currentPath, StringComparison.OrdinalIgnoreCase));
+
+    private IReadOnlyCollection<PortalRoute> GetDefaultRecommendedRoutes(IReadOnlyCollection<PortalRoute> availableRoutes)
+    {
+        var preferredOrder = new[] { "/dashboard", "/attendance", "/leaves", "/payroll", "/employees", "/documents" };
+        return preferredOrder
+            .Select(path => availableRoutes.FirstOrDefault(route => string.Equals(route.Path, path, StringComparison.OrdinalIgnoreCase)))
+            .Where(route => route is not null)
+            .Cast<PortalRoute>()
+            .Take(3)
+            .ToArray();
+    }
+
+    private static int GetRouteScore(string content, PortalRoute route)
+    {
+        var score = 0;
+        var normalized = content.Trim().ToLowerInvariant();
+
+        if (normalized.Contains(route.Label.ToLowerInvariant()))
+        {
+            score += 5;
+        }
+
+        if (normalized.Contains(route.Path.Trim('/').ToLowerInvariant()))
+        {
+            score += 4;
+        }
+
+        foreach (var keyword in route.Keywords)
+        {
+            if (normalized.Contains(keyword.ToLowerInvariant()))
+            {
+                score += 2;
+            }
+        }
+
+        return score;
+    }
+
+    private static bool ShouldAutoNavigate(string userMessage) =>
+        Regex.IsMatch(userMessage, @"\b(go|open|navigate|redirect|take me|show me|bring me)\b", RegexOptions.IgnoreCase);
+
+    private static string ExtractAssistantContent(NvidiaChatCompletionResponse? completion)
+    {
+        var content = completion?.Choices.FirstOrDefault()?.Message?.Content;
+        if (content is null || content.Value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        {
+            return string.Empty;
+        }
+
+        return ExtractContentValue(content.Value);
+    }
+
+    private static string ExtractAssistantDelta(string rawChunk)
+    {
+        try
+        {
+            var chunk = JsonSerializer.Deserialize<NvidiaChatCompletionChunk>(rawChunk, JsonOptions);
+            var content = chunk?.Choices.FirstOrDefault()?.Delta?.Content;
+            if (content is null || content.Value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+            {
+                return string.Empty;
+            }
+
+            return ExtractContentValue(content.Value);
+        }
+        catch (JsonException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string ExtractContentValue(JsonElement content)
+    {
+        if (content.ValueKind == JsonValueKind.String)
+        {
+            return content.GetString() ?? string.Empty;
+        }
+
+        if (content.ValueKind == JsonValueKind.Array)
+        {
+            var parts = new List<string>();
+            foreach (var item in content.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    parts.Add(item.GetString() ?? string.Empty);
+                    continue;
+                }
+
+                if (item.ValueKind == JsonValueKind.Object &&
+                    item.TryGetProperty("text", out var textElement) &&
+                    textElement.ValueKind == JsonValueKind.String)
+                {
+                    parts.Add(textElement.GetString() ?? string.Empty);
+                }
+            }
+
+            return string.Join(string.Empty, parts);
+        }
+
+        return string.Empty;
+    }
+
+    private static string SanitizeMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return "I can help with HRMS features, workflows, and navigation.";
+        }
+
+        var cleaned = message
+            .Replace("```", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Trim();
+
+        return cleaned.Length <= 900 ? cleaned : cleaned[..900].TrimEnd();
     }
 
     private static string BuildProviderErrorMessage(System.Net.HttpStatusCode statusCode, string rawResponse)
@@ -265,221 +586,6 @@ Available routes:
         return rawResponse.Length <= 180 ? rawResponse : $"{rawResponse[..180].TrimEnd()}...";
     }
 
-    private AssistantResponsePayload ParseAssistantPayload(
-        string rawContent,
-        IReadOnlyCollection<PortalRoute> availableRoutes,
-        string latestUserMessage)
-    {
-        var json = ExtractJson(rawContent);
-        if (!string.IsNullOrWhiteSpace(json))
-        {
-            try
-            {
-                var payload = JsonSerializer.Deserialize<ModelPayload>(json, JsonOptions);
-                if (payload is not null && !string.IsNullOrWhiteSpace(payload.Message))
-                {
-                    return BuildResponsePayload(payload.Message, payload.ActionRouteIds, payload.AutoNavigateRouteId, availableRoutes, latestUserMessage);
-                }
-            }
-            catch (JsonException exception)
-            {
-                _logger.LogDebug(exception, "Unable to parse assistant JSON payload. Falling back to heuristic response.");
-            }
-        }
-
-        return BuildFallbackPayload(rawContent, availableRoutes, latestUserMessage);
-    }
-
-    private AssistantResponsePayload BuildFallbackPayload(
-        string rawContent,
-        IReadOnlyCollection<PortalRoute> availableRoutes,
-        string latestUserMessage)
-    {
-        var matchedRoutes = MatchRoutes(latestUserMessage, availableRoutes);
-        var autoRoute = ShouldAutoNavigate(latestUserMessage) ? matchedRoutes.FirstOrDefault()?.Id : null;
-        var message = string.IsNullOrWhiteSpace(rawContent)
-            ? "I can help explain HRMS features and point you to the right module."
-            : SanitizeMessage(rawContent);
-
-        return BuildResponsePayload(message, matchedRoutes.Select(route => route.Id).ToArray(), autoRoute, availableRoutes, latestUserMessage);
-    }
-
-    private AssistantResponsePayload BuildResponsePayload(
-        string message,
-        IReadOnlyCollection<string>? actionRouteIds,
-        string? autoNavigateRouteId,
-        IReadOnlyCollection<PortalRoute> availableRoutes,
-        string latestUserMessage)
-    {
-        var routeLookup = availableRoutes.ToDictionary(route => route.Id, StringComparer.OrdinalIgnoreCase);
-        var actions = new List<AiAssistantActionDto>();
-
-        foreach (var routeId in actionRouteIds ?? Array.Empty<string>())
-        {
-            if (!routeLookup.TryGetValue(routeId, out var route))
-            {
-                continue;
-            }
-
-            if (actions.Any(existing => string.Equals(existing.Path, route.Path, StringComparison.OrdinalIgnoreCase)))
-            {
-                continue;
-            }
-
-            actions.Add(new AiAssistantActionDto
-            {
-                Label = route.Label,
-                Path = route.Path,
-                Description = route.Description,
-                AutoNavigate = string.Equals(route.Id, autoNavigateRouteId, StringComparison.OrdinalIgnoreCase)
-            });
-        }
-
-        if (actions.Count == 0)
-        {
-            foreach (var route in MatchRoutes(latestUserMessage, availableRoutes).Take(3))
-            {
-                actions.Add(new AiAssistantActionDto
-                {
-                    Label = route.Label,
-                    Path = route.Path,
-                    Description = route.Description,
-                    AutoNavigate = string.Equals(route.Id, autoNavigateRouteId, StringComparison.OrdinalIgnoreCase)
-                });
-            }
-        }
-
-        var autoNavigatePath = routeLookup.TryGetValue(autoNavigateRouteId ?? string.Empty, out var autoRoute)
-            ? autoRoute.Path
-            : null;
-
-        return new AssistantResponsePayload
-        {
-            Message = SanitizeMessage(message),
-            Actions = actions,
-            AutoNavigatePath = autoNavigatePath
-        };
-    }
-
-    private static IReadOnlyCollection<PortalRoute> MatchRoutes(string userMessage, IReadOnlyCollection<PortalRoute> availableRoutes)
-    {
-        if (string.IsNullOrWhiteSpace(userMessage))
-        {
-            return availableRoutes.Take(3).ToArray();
-        }
-
-        return availableRoutes
-            .Select(route => new
-            {
-                Route = route,
-                Score = GetRouteScore(userMessage, route)
-            })
-            .Where(item => item.Score > 0)
-            .OrderByDescending(item => item.Score)
-            .ThenBy(item => item.Route.Label)
-            .Select(item => item.Route)
-            .Take(3)
-            .ToArray();
-    }
-
-    private static int GetRouteScore(string userMessage, PortalRoute route)
-    {
-        var score = 0;
-        var normalized = userMessage.Trim().ToLowerInvariant();
-
-        if (normalized.Contains(route.Label.ToLowerInvariant()))
-        {
-            score += 4;
-        }
-
-        if (normalized.Contains(route.Path.Trim('/').ToLowerInvariant()))
-        {
-            score += 3;
-        }
-
-        foreach (var keyword in route.Keywords)
-        {
-            if (normalized.Contains(keyword.ToLowerInvariant()))
-            {
-                score += 2;
-            }
-        }
-
-        return score;
-    }
-
-    private static bool ShouldAutoNavigate(string userMessage) =>
-        Regex.IsMatch(userMessage, @"\b(go|open|navigate|redirect|take me|show me)\b", RegexOptions.IgnoreCase);
-
-    private static string ExtractAssistantContent(NvidiaChatCompletionResponse? completion)
-    {
-        var content = completion?.Choices.FirstOrDefault()?.Message?.Content;
-        if (content is null || content.Value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
-        {
-            return string.Empty;
-        }
-
-        if (content.Value.ValueKind == JsonValueKind.String)
-        {
-            return content.Value.GetString() ?? string.Empty;
-        }
-
-        if (content.Value.ValueKind == JsonValueKind.Array)
-        {
-            var parts = new List<string>();
-            foreach (var item in content.Value.EnumerateArray())
-            {
-                if (item.ValueKind == JsonValueKind.String)
-                {
-                    parts.Add(item.GetString() ?? string.Empty);
-                    continue;
-                }
-
-                if (item.ValueKind == JsonValueKind.Object &&
-                    item.TryGetProperty("text", out var textElement) &&
-                    textElement.ValueKind == JsonValueKind.String)
-                {
-                    parts.Add(textElement.GetString() ?? string.Empty);
-                }
-            }
-
-            return string.Join(" ", parts).Trim();
-        }
-
-        return content.Value.ToString();
-    }
-
-    private static string ExtractJson(string rawContent)
-    {
-        if (string.IsNullOrWhiteSpace(rawContent))
-        {
-            return string.Empty;
-        }
-
-        var trimmed = rawContent.Trim();
-        var start = trimmed.IndexOf('{');
-        var end = trimmed.LastIndexOf('}');
-
-        return start >= 0 && end > start
-            ? trimmed[start..(end + 1)]
-            : string.Empty;
-    }
-
-    private static string SanitizeMessage(string message)
-    {
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            return "I can help with HRMS features and navigation.";
-        }
-
-        var cleaned = message
-            .Replace("```json", string.Empty, StringComparison.OrdinalIgnoreCase)
-            .Replace("```", string.Empty, StringComparison.OrdinalIgnoreCase)
-            .Trim();
-
-        return cleaned.Length <= 420 ? cleaned : cleaned[..420].TrimEnd();
-    }
-
     private sealed record PortalRoute(
         string Id,
         string Path,
@@ -489,20 +595,6 @@ Available routes:
         params string[] RouteKeywords)
     {
         public IReadOnlyCollection<string> Keywords { get; } = RouteKeywords;
-    }
-
-    private sealed class ModelPayload
-    {
-        public string Message { get; init; } = string.Empty;
-        public IReadOnlyCollection<string>? ActionRouteIds { get; init; }
-        public string? AutoNavigateRouteId { get; init; }
-    }
-
-    private sealed class AssistantResponsePayload
-    {
-        public string Message { get; init; } = string.Empty;
-        public IReadOnlyCollection<AiAssistantActionDto> Actions { get; init; } = Array.Empty<AiAssistantActionDto>();
-        public string? AutoNavigatePath { get; init; }
     }
 
     private sealed class NvidiaChatCompletionResponse
@@ -516,6 +608,21 @@ Available routes:
     }
 
     private sealed class NvidiaMessage
+    {
+        public JsonElement? Content { get; init; }
+    }
+
+    private sealed class NvidiaChatCompletionChunk
+    {
+        public IReadOnlyCollection<NvidiaChunkChoice> Choices { get; init; } = Array.Empty<NvidiaChunkChoice>();
+    }
+
+    private sealed class NvidiaChunkChoice
+    {
+        public NvidiaDelta? Delta { get; init; }
+    }
+
+    private sealed class NvidiaDelta
     {
         public JsonElement? Content { get; init; }
     }

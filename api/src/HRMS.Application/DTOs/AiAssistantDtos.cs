@@ -19,6 +19,16 @@ public sealed class AiChatResponseDto
     public string? AutoNavigatePath { get; init; }
 }
 
+public sealed class AiChatStreamEventDto
+{
+    public string Type { get; init; } = string.Empty;
+    public string? Delta { get; init; }
+    public string? Message { get; init; }
+    public IReadOnlyCollection<AiAssistantActionDto> Actions { get; init; } = Array.Empty<AiAssistantActionDto>();
+    public string? AutoNavigatePath { get; init; }
+    public string? Error { get; init; }
+}
+
 public sealed class AiAssistantActionDto
 {
     public string Label { get; init; } = string.Empty;

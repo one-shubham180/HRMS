@@ -39,6 +39,15 @@ export interface AiChatResponse {
   autoNavigatePath?: string | null;
 }
 
+export interface AiChatStreamEvent {
+  type: "delta" | "complete" | "error";
+  delta?: string | null;
+  message?: string | null;
+  actions: AiAssistantAction[];
+  autoNavigatePath?: string | null;
+  error?: string | null;
+}
+
 export interface PagedResult<T> {
   items: T[];
   pageNumber: number;
