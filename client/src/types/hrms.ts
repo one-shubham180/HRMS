@@ -19,6 +19,26 @@ export interface AuthResponse {
   employeeId?: string;
 }
 
+export type AiChatRole = "user" | "assistant";
+
+export interface AiChatMessage {
+  role: AiChatRole;
+  content: string;
+}
+
+export interface AiAssistantAction {
+  label: string;
+  path: string;
+  description: string;
+  autoNavigate: boolean;
+}
+
+export interface AiChatResponse {
+  message: string;
+  actions: AiAssistantAction[];
+  autoNavigatePath?: string | null;
+}
+
 export interface PagedResult<T> {
   items: T[];
   pageNumber: number;

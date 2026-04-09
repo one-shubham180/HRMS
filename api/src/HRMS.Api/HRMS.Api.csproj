@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>hrms-api-bd1c5f2a-20d0-4d74-a90e-2b7e4b4f6c32</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
