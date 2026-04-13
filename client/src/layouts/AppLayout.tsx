@@ -14,6 +14,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { AiChatWidget } from "../components/AiChatWidget";
 import { useAuthStore } from "../features/auth/authStore";
 
 function hasAnyRole(userRoles: string[], allowedRoles?: string[]) {
@@ -87,6 +88,8 @@ export function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      <AiChatWidget />
     </div>
   );
 }
