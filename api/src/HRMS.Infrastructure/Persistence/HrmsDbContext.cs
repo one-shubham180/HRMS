@@ -142,7 +142,7 @@ public class HrmsDbContext : IdentityDbContext<ApplicationUser, IdentityRole<Gui
             entity.HasOne(x => x.RosterAssignment)
                 .WithMany(x => x.AttendanceRecords)
                 .HasForeignKey(x => x.RosterAssignmentId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<AttendanceSettings>(entity =>

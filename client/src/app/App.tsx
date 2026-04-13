@@ -16,6 +16,7 @@ import { PayrollPage } from "../pages/PayrollPage";
 import { RegisterPage } from "../pages/RegisterPage";
 import { TalentPage } from "../pages/TalentPage";
 import { WorkforcePage } from "../pages/WorkforcePage";
+import { IdentityCardStudioPage } from "../pages/IdentityCardStudioPage";
 
 export const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
@@ -38,7 +39,7 @@ export const router = createBrowserRouter([
           { path: "/workforce", element: <WorkforcePage /> },
           { path: "/notifications", element: <NotificationsPage /> },
           { path: "/documents", element: <DocumentVaultPage /> },
-          { path: "/talent", element: <TalentPage /> },
+          { path: "/identity-card", element: <IdentityCardStudioPage /> },
         ],
       },
     ],
